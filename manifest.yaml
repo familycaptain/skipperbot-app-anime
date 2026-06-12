@@ -1,0 +1,55 @@
+id: anime
+name: Anime
+version: "1.0.0"
+description: >
+  Anime search and streaming. Searches the allanime.day catalog,
+  fetches episode lists, resolves playable HLS sources, and streams
+  them through the in-app web player. Tracks watch history and resume
+  position per anime. Supports sub/dub modes and 1080p/720p/480p quality.
+onboarding_tour: true  # included in the first-run onboarding tour
+
+entity_types:
+  - prefix: "an"
+    name: Anime
+    table: anime_titles
+  - prefix: "anwh"
+    name: Anime Watch
+    table: anime_watch_history
+
+emits:
+  - anime.episode_played
+  - anime.episode_finished
+
+tool_category:
+  description: >
+    Search for anime, list episodes, resume the last-watched episode,
+    or play a specific episode in the in-app web player.
+    Backed by the allanime.day public catalog.
+  keywords:
+    - anime
+    - watch anime
+    - play anime
+    - find anime
+    - search anime
+    - next episode
+    - resume anime
+    - what was I watching
+    - anime episode
+    - dubbed anime
+    - subbed anime
+    - anime history
+    - anime player
+
+ui:
+  apps:
+    - id: anime
+      name: Anime
+      icon: Tv
+      component: AnimeApp
+      singleton: true
+    - id: anime-player
+      name: Anime Player
+      icon: PlayCircle
+      component: AnimePlayerApp
+      singleton: false
+      hidden: true

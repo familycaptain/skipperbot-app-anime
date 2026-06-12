@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anime Player</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: #000; color: #e5e7eb; font-family: system-ui, sans-serif; overflow: hidden; }
+  .bar {
+    background: #0a0a0a; border-bottom: 1px solid #1f1f1f;
+    padding: 8px 12px; display: flex; align-items: center; gap: 10px;
+    flex-wrap: wrap; font-size: 13px;
+  }
+  .bar h1 { font-size: 14px; font-weight: 600; color: #f4f4f5; margin-right: 8px; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar select, .bar button {
+    background: #18181b; border: 1px solid #27272a; color: #e5e7eb;
+    border-radius: 4px; padding: 4px 8px; font-size: 13px; cursor: pointer;
+  }
+  .bar button:hover, .bar select:hover { background: #27272a; }
+  .bar .meta { color: #71717a; font-size: 12px; }
+  /* Container that fills the area below the toolbar; video sits inside at its
+     intrinsic aspect ratio, centered, capped to the container's dimensions. */
+  .stage { width: 100%; height: calc(100vh - 41px); background: #000; display: flex; align-items: center; justify-content: center; }
+  video { max-width: 100%; max-height: 100%; background: #000; display: block; }
+  .err {
+    position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+    background: rgba(127,29,29,0.9); border: 1px solid #7f1d1d; color: #fecaca;
+    padding: 10px 14px; border-radius: 6px; font-size: 13px; max-width: 80%;
+    z-index: 10;
+  }
+  .loading {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    color: #a1a1aa; font-size: 14px; z-index: 5;
+  }
+  .unmute-overlay {
+    position: fixed; inset: 0; display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 80px; background: rgba(0,0,0,0.0); pointer-events: none; z-index: 30;
+  }
+  .unmute-pill {
+    pointer-events: auto;
+    background: rgba(20, 184, 166, 0.95); color: white; padding: 10px 18px;
+    border-radius: 999px; font-size: 14px; font-weight: 600;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px;
+    border: none;
+  }
+  .unmute-pill:hover { background: rgba(13, 148, 136, 0.95); }
+</style>
+</head>
+<body>
+<div class="bar">
+  <h1 id="title">Anime Player</h1>
+  <span class="meta" id="meta"></span>
+  <button id="prevBtn" title="Previous episode">⟨ Prev</button>
+  <button id="nextBtn" title="Next episode">Next ⟩</button>
+  <select id="modeSel" title="Sub / Dub">
+    <option value="sub">Sub</option>
+    <option value="dub">Dub</option>
+  </select>
+  <select id="qualSel" title="Quality"></select>
+  <button id="reloadBtn" title="Re-resolve sources">⟳</button>
+</div>
+
+<div class="stage">
+  <video id="video" controls playsinline crossorigin="anonymous"></video>
+</div>
+<div id="loading" class="loading">Loading…</div>
+<div id="error" class="err" style="display:none"></div>
+<div id="unmuteOverlay" class="unmute-overlay" style="display:none">
+  <button id="unmuteBtn" class="unmute-pill" type="button">🔊 Click anywhere to enable audio</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+<script>
+(function () {
+  const API = "/api/apps/anime";
+  const params = new URLSearchParams(location.search);
+  const state = {
+    animeId: params.get("animeId") || "",
+    episode: params.get("episode") || "1",
+    mode:    params.get("mode")    || "sub",
+    quality: params.get("quality") || "auto",
+    title:   params.get("title")   || "Anime",
+    userId:  params.get("userId")  || "",
+    seekTo:  Number(params.get("t")) || 0,
+    chName:  params.get("ch")      || "",
+    episodes: [],
+  };
+
+  // BroadcastChannel back to the in-app player tab. Used to (a) tell that tab
+  // our latest playback position so its "Resume here" button works, and
+  // (b) listen for a "close" command from that button.
+  let channel = null;
+  if (state.chName && typeof BroadcastChannel !== "undefined") {
+    try {
+      channel = new BroadcastChannel(state.chName);
+      channel.onmessage = (e) => {
+        if (e.data && e.data.type === "close") {
+          try { window.close(); } catch {/* ignore */}
+        }
+      };
+    } catch {/* unsupported / blocked — non-fatal */}
+  }
+  function postPositionToOpener() {
+    if (!channel) return;
+    try { channel.postMessage({ type: "position", currentTime: $video.currentTime || 0 }); } catch {/* ignore */}
+  }
+
+  const $title  = document.getElementById("title");
+  const $meta   = document.getElementById("meta");
+  const $video  = document.getElementById("video");
+  const $err    = document.getElementById("error");
+  const $loading = document.getElementById("loading");
+  const $modeSel = document.getElementById("modeSel");
+  const $qualSel = document.getElementById("qualSel");
+  const $prev   = document.getElementById("prevBtn");
+  const $next   = document.getElementById("nextBtn");
+  const $reload = document.getElementById("reloadBtn");
+
+  let hls = null;
+  let lastStreams = [];
+
+  function b64u(s) {
+    return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function setError(msg) {
+    if (!msg) { $err.style.display = "none"; return; }
+    $err.textContent = msg; $err.style.display = "block";
+  }
+  function setLoading(on) { $loading.style.display = on ? "block" : "none"; }
+
+  function refreshHeader() {
+    $title.textContent = state.title;
+    $meta.textContent = `Episode ${state.episode} • ${state.mode}`;
+    document.title = `${state.title} — ep ${state.episode}`;
+    $modeSel.value = state.mode;
+  }
+
+  async function loadEpisodes() {
+    try {
+      const r = await fetch(`${API}/episodes/${encodeURIComponent(state.animeId)}?mode=${state.mode}`);
+      const d = await r.json();
+      state.episodes = d.episodes || [];
+      if (d.title) state.title = d.title;
+      refreshHeader();
+    } catch { state.episodes = []; }
+  }
+
+  async function loadSources() {
+    setError(""); setLoading(true);
+    try {
+      const r = await fetch(`${API}/sources/${encodeURIComponent(state.animeId)}/${encodeURIComponent(state.episode)}?mode=${state.mode}`);
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Source resolution failed");
+      lastStreams = d.streams || [];
+      // Build quality dropdown
+      $qualSel.innerHTML = "";
+      const opts = ["auto"];
+      const heights = lastStreams.map(s => s.quality).filter(q => /^\d+$/.test(q));
+      const uniq = Array.from(new Set(heights)).sort((a, b) => Number(b) - Number(a));
+      opts.push(...uniq);
+      for (const q of opts) {
+        const o = document.createElement("option");
+        o.value = q; o.textContent = (q === "auto" ? "Auto" : q + "p");
+        $qualSel.appendChild(o);
+      }
+      if (!opts.includes(state.quality)) state.quality = opts[1] || "auto";
+      $qualSel.value = state.quality;
+      attach();
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function pickStream() {
+    if (!lastStreams.length) return null;
+    if (state.quality === "auto") return lastStreams.find(s => s.is_hls) || lastStreams[0];
+    return lastStreams.find(s => s.quality === state.quality) || lastStreams[0];
+  }
+
+  const $unmuteOverlay = document.getElementById("unmuteOverlay");
+  const $unmuteBtn = document.getElementById("unmuteBtn");
+
+  function hideUnmuteOverlay() {
+    $unmuteOverlay.style.display = "none";
+    document.removeEventListener("click", unmuteOnInteract, true);
+    document.removeEventListener("keydown", unmuteOnInteract, true);
+  }
+  function unmuteOnInteract() {
+    $video.muted = false;
+    // play() may already be running muted — re-call to ensure audio kicks in
+    const p = $video.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+    hideUnmuteOverlay();
+  }
+  function showUnmuteOverlay() {
+    $unmuteOverlay.style.display = "flex";
+    // Any click anywhere on the page (including on the video) unmutes
+    document.addEventListener("click", unmuteOnInteract, true);
+    document.addEventListener("keydown", unmuteOnInteract, true);
+  }
+  $unmuteBtn.addEventListener("click", unmuteOnInteract);
+
+  // Try to start playback un-muted first (most cases work because the user
+  // just clicked Pop Out, granting transient activation). If the browser
+  // blocks audible autoplay anyway, fall back to muted playback and prompt
+  // the user to click anywhere to enable sound.
+  function tryAutoplay() {
+    $video.muted = false;
+    const p = $video.play();
+    if (p && typeof p.catch === "function") {
+      p.catch(() => {
+        $video.muted = true;
+        const p2 = $video.play();
+        if (p2 && typeof p2.catch === "function") p2.catch(() => {/* fully blocked */});
+        showUnmuteOverlay();
+      });
+    }
+  }
+
+  function attach() {
+    if (hls) { hls.destroy(); hls = null; }
+    const chosen = pickStream();
+    if (!chosen) return;
+    // Seek to the handoff position once metadata is ready (only on first attach)
+    if (state.seekTo > 0) {
+      const seekOnce = () => {
+        try { $video.currentTime = state.seekTo; } catch {/* ignore */}
+        state.seekTo = 0;
+        $video.removeEventListener("loadedmetadata", seekOnce);
+      };
+      $video.addEventListener("loadedmetadata", seekOnce);
+    }
+    if (chosen.is_hls) {
+      const url = `${API}/stream/${encodeURIComponent(state.animeId)}/${encodeURIComponent(state.episode)}/${encodeURIComponent(state.quality)}/master.m3u8?mode=${state.mode}`;
+      if (window.Hls && Hls.isSupported()) {
+        hls = new Hls({ enableWorker: true });
+        hls.loadSource(url);
+        hls.attachMedia($video);
+        hls.on(Hls.Events.MANIFEST_PARSED, tryAutoplay);
+        hls.on(Hls.Events.ERROR, (_e, data) => {
+          if (data.fatal) setError(`Playback error: ${data.type} / ${data.details}`);
+        });
+      } else if ($video.canPlayType("application/vnd.apple.mpegurl")) {
+        $video.src = url;
+        $video.addEventListener("loadedmetadata", tryAutoplay, { once: true });
+      } else {
+        setError("This browser does not support HLS playback.");
+      }
+    } else {
+      $video.src = `${API}/stream/proxy?u=${b64u(chosen.url)}&r=${b64u(chosen.referer || "")}`;
+      $video.addEventListener("loadedmetadata", tryAutoplay, { once: true });
+    }
+  }
+
+  // Position recording (history) + position handoff to opener.
+  let lastSent = 0;
+  let lastPostedToOpener = 0;
+  $video.addEventListener("timeupdate", () => {
+    const now = Date.now();
+    // Push current position to the opener every ~2s — cheap, in-process postMessage
+    if (now - lastPostedToOpener > 2000) {
+      lastPostedToOpener = now;
+      postPositionToOpener();
+    }
+    // Persist watch position to the backend every ~15s
+    if (now - lastSent < 15000) return;
+    lastSent = now;
+    const pos = Math.floor($video.currentTime || 0);
+    const finished = $video.duration && $video.currentTime / $video.duration > 0.92;
+    if (!state.userId) return;  // refuse to record without a known user
+    fetch(`${API}/history/record`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        allanime_id: state.animeId,
+        title: state.title,
+        episode: state.episode,
+        mode: state.mode,
+        user_id: state.userId,
+        position_s: pos,
+        finished: !!finished,
+      }),
+    }).catch(() => {});
+  });
+  // One last position handoff right before the window closes, so resuming
+  // in-app picks up the exact final spot even if no timeupdate fired recently.
+  window.addEventListener("beforeunload", () => {
+    postPositionToOpener();
+    try { channel && channel.close(); } catch {/* ignore */}
+  });
+
+  // Controls
+  $modeSel.addEventListener("change", async () => {
+    state.mode = $modeSel.value;
+    refreshHeader();
+    await loadEpisodes();
+    await loadSources();
+  });
+  $qualSel.addEventListener("change", () => {
+    state.quality = $qualSel.value;
+    attach();
+  });
+  $prev.addEventListener("click", () => {
+    const i = state.episodes.indexOf(state.episode);
+    if (i > 0) { state.episode = state.episodes[i - 1]; refreshHeader(); loadSources(); }
+  });
+  $next.addEventListener("click", () => {
+    const i = state.episodes.indexOf(state.episode);
+    if (i >= 0 && i + 1 < state.episodes.length) {
+      state.episode = state.episodes[i + 1]; refreshHeader(); loadSources();
+    }
+  });
+  $reload.addEventListener("click", () => loadSources());
+
+  // Boot
+  if (!state.animeId) {
+    setError("Missing animeId param.");
+  } else if (!state.userId) {
+    setError("Missing userId param — pop-out must be opened from the in-app player.");
+  } else {
+    refreshHeader();
+    loadEpisodes().then(loadSources);
+  }
+})();
+</script>
+</body>
+</html>
