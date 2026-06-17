@@ -52,4 +52,4 @@ ui:
       icon: PlayCircle
       component: AnimePlayerApp
       singleton: false
-      hidden: true
+      subview: true

@@ -5,5 +5,5 @@ import { Tv, PlayCircle } from "lucide-react";
 
 export default [
   { id: "anime", name: "Anime", icon: Tv, component: lazy(() => import("./AnimeApp")), singleton: true },
-  { id: "anime-player", name: "Anime Player", icon: PlayCircle, component: lazy(() => import("./AnimePlayerApp")), singleton: false, hidden: true },
+  { id: "anime-player", name: "Anime Player", icon: PlayCircle, component: lazy(() => import("./AnimePlayerApp")), singleton: false, subview: true },
 ];
