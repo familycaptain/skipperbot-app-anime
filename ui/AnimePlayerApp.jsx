@@ -45,6 +45,18 @@ export default function AnimePlayerApp({ context = {}, onTitle, onOpenApp, userI
   // messages from the pop-out. Consumed when the user clicks "Resume here".
   const popoutPositionRef = useRef(0);
 
+  // Preserve the user's chosen quality across episode/mode switches. Read inside
+  // resolveSources WITHOUT being one of its deps (a quality dep would re-resolve
+  // sources on every quality change). null = no selection yet → first resolve
+  // picks the default.
+  const qualityRef = useRef(null);
+  useEffect(() => { if (quality) qualityRef.current = quality; }, [quality]);
+
+  // Preserve element-level media state across the per-episode <video> remount
+  // (a fresh element otherwise resets volume/mute).
+  const volumeRef = useRef(1);
+  const mutedRef = useRef(false);
+
   // Channel name keys on this specific tab so multiple pop-outs of different
   // shows don't cross-talk.
   const channelName = useMemo(() => `anime-player::${animeId}::${episode}::${mode}`, [animeId, episode, mode]);
@@ -79,12 +91,16 @@ export default function AnimePlayerApp({ context = {}, onTitle, onOpenApp, userI
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Source resolution failed");
       setSources(data);
-      // Default quality: prefer the highest numeric we have, else "auto"
-      const heights = (data.streams || [])
-        .map(s => s.quality)
+      // Preserve the user's current quality across the switch when episode B
+      // offers it (or it's "auto"); otherwise fall back to B's highest. On the
+      // very first resolve (no prior selection) default to the highest.
+      const avail = (data.streams || []).map(s => s.quality);
+      const heights = avail
         .filter(q => /^\d+$/.test(q))
         .sort((a, b) => Number(b) - Number(a));
-      setQuality(heights[0] || "auto");
+      const want = qualityRef.current;
+      const keep = want && (want === "auto" || avail.includes(want));
+      setQuality(keep ? want : (heights[0] || "auto"));
     } catch (err) {
       setError(err.message || String(err));
     } finally {
@@ -122,11 +138,24 @@ export default function AnimePlayerApp({ context = {}, onTitle, onOpenApp, userI
     if (!chosen || !videoRef.current) return;
     const video = videoRef.current;
 
-    // Tear down any prior hls.js instance
+    // Full teardown of any prior media before loading the new source. The
+    // per-(anime,episode,mode) <video> remount (key on the element below) is the
+    // primary stale-media guard — a fresh element can carry no prior episode's
+    // MediaSource/buffer. This block fully resets the SAME element on a quality
+    // switch (which keeps the element) and is otherwise purely defensive.
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
+    if (video.getAttribute("src")) {
+      try { video.removeAttribute("src"); video.load(); } catch {/* ignore */}
+    }
+
+    // Re-apply element-level state lost when the <video> remounts per episode.
+    try { video.volume = volumeRef.current; } catch {/* ignore */}
+    video.muted = mutedRef.current;
+    const onVolume = () => { volumeRef.current = video.volume; mutedRef.current = video.muted; };
+    video.addEventListener("volumechange", onVolume);
 
     // If we just resumed from a pop-out, seek to the last known position.
     const seekIfPending = () => {
@@ -171,6 +200,7 @@ export default function AnimePlayerApp({ context = {}, onTitle, onOpenApp, userI
     }
 
     return () => {
+      video.removeEventListener("volumechange", onVolume);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -270,14 +300,14 @@ export default function AnimePlayerApp({ context = {}, onTitle, onOpenApp, userI
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => prevEp && setEpisode(prevEp)}
-            disabled={!prevEp}
+            disabled={!prevEp || poppedOut}
             className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40"
           >
             <ChevronLeft className="w-4 h-4" /> Prev
           </button>
           <button
             onClick={() => nextEp && setEpisode(nextEp)}
-            disabled={!nextEp}
+            disabled={!nextEp || poppedOut}
             className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40"
           >
             Next <ChevronRight className="w-4 h-4" />
@@ -286,8 +316,9 @@ export default function AnimePlayerApp({ context = {}, onTitle, onOpenApp, userI
           <select
             value={mode}
             onChange={(e) => setMode(e.target.value)}
-            className="text-sm bg-zinc-900 border border-zinc-800 rounded px-2 py-1"
-            title="Sub / Dub"
+            disabled={poppedOut}
+            className="text-sm bg-zinc-900 border border-zinc-800 rounded px-2 py-1 disabled:opacity-40"
+            title={poppedOut ? "Resume here to change episode/mode" : "Sub / Dub"}
           >
             <option value="sub">Sub</option>
             <option value="dub">Dub</option>
@@ -296,7 +327,8 @@ export default function AnimePlayerApp({ context = {}, onTitle, onOpenApp, userI
           <select
             value={quality}
             onChange={(e) => setQuality(e.target.value)}
-            className="text-sm bg-zinc-900 border border-zinc-800 rounded px-2 py-1"
+            disabled={poppedOut}
+            className="text-sm bg-zinc-900 border border-zinc-800 rounded px-2 py-1 disabled:opacity-40"
             title="Quality"
           >
             {qualityOptions.map(q => (
@@ -349,6 +381,14 @@ export default function AnimePlayerApp({ context = {}, onTitle, onOpenApp, userI
           </div>
         )}
 
+        {!loading && !error && sources && !chosen && !poppedOut && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-zinc-400 z-10">
+            <AlertCircle className="w-6 h-6" />
+            <div className="text-sm">No playable source for episode {episode}{mode === "dub" ? " (dub)" : ""}.</div>
+            <div className="text-xs text-zinc-500">Try switching Sub/Dub, quality, or another episode.</div>
+          </div>
+        )}
+
         {poppedOut ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
             <div className="text-zinc-300 text-sm">Playing in pop-out window</div>
@@ -366,6 +406,7 @@ export default function AnimePlayerApp({ context = {}, onTitle, onOpenApp, userI
           </div>
         ) : (
           <video
+            key={`${animeId}:${episode}:${mode}`}
             ref={videoRef}
             controls
             autoPlay

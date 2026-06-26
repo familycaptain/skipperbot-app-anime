@@ -1,0 +1,57 @@
+kind: specification
+id: anime.player.episode-switch
+title: Episode change reloads the player to the newly-selected episode's stream
+behavior: "GIVEN the anime player is playing episode A of a title, WHEN the user selects a\
+  \ different episode B (via Next, Prev, or the episode picker) — or changes mode (sub/dub)\
+  \ or quality — THEN the player tears down the currently-playing media and loads and begins\
+  \ playing episode B's stream. The header/label, the resolved sources, and the actually-playing\
+  \ video MUST all correspond to episode B. It is NOT sufficient for the label/index to change\
+  \ or for a master-playlist request to be issued; the VIDEO that plays must be episode B's\
+  \ content. After the change the player resolves sources for B (GET /api/apps/anime/sources/{id}/{B}),\
+  \ loads /api/apps/anime/stream/{id}/{B}/{quality}/master.m3u8, and fetches B's media segments\
+  \ (the /api/apps/anime/stream/proxy?u=<upstream-segment-url> requests after the change decode\
+  \ to B's upstream segment URLs). \n\nResolution & preservation: a pure episode switch PRESERVES\
+  \ the current mode and quality — only the dimension(s) the user actually changed vary; the\
+  \ new master URL carries the preserved {mode}/{quality}. \n\nBoundaries: Next on the last\
+  \ episode and Prev on the first are disabled / no-op — no teardown or reload occurs at the\
+  \ ends. \n\nResume position: episode B starts at B's OWN saved resume position (or 0 if\
+  \ none) — never at A's position. Existing pop-out / resume-here behavior is preserved (popping\
+  \ out and resuming continues the SAME episode at its position). \n\nUnavailable variant:\
+  \ if the requested mode/quality does not exist for B, the player falls back to an available\
+  \ variant or surfaces a visible error — it must not silently load nothing or keep playing\
+  \ A. \n\nSettled / no-stale: once B's master-playlist response has returned, no further\
+  \ /stream/proxy request that decodes to an A-only segment is issued for at least 5s. 'A-only\
+  \ segment' = an upstream segment URL observed for A that is NOT part of B's resolved manifest\
+  \ (shared CDN/token segments common to both are not counted, to avoid false failures)."
+implements:
+- anime.player
+tests:
+- type: e2e
+  path: tests/e2e/test_player_episode_switch.py
+  rubric: 'Playwright UI scenario on the test host (box2 harness, david/david1234). FIXTURE/PRECONDITION:
+    pre-warm the source cache via the API for One Piece (allanime_id ReooPAxPMsHM4KPMY) episodes
+    1 and 2, retrying through intermittent allanime 502s; if the upstream catalog cannot be
+    warmed after the retry budget, SKIP the test as ''cannot run'' (a 502 storm is NOT a failure
+    — allanime resilience is out of scope). STEPS: open the player on episode 1 and let it
+    begin loading; capture all /api/apps/anime/stream/proxy?u=... requests and decode the
+    b64 `u` to the set S1 of upstream segment URLs requested on ep 1. Click Next (label advances
+    to ''Episode 2''). Wait for ep 2''s master playlist response, then observe for a settle
+    window (>=5s). ASSERT: (a) label is ''Episode 2''; (b) episode 2''s master /stream/ReooPAxPMsHM4KPMY/2/.../master.m3u8
+    was requested AND the mode/quality in that URL match what was active on ep1 (preservation);
+    (c) the set S2 of decoded segment URLs requested after the click contains URLs NOT in
+    S1 (ep 2''s distinct stream actually loads); (d) during the settle window, no NEW request
+    decodes to an A-only segment (in S1 but not in ep2''s manifest). FAIL if only ep-1 segment
+    URLs keep loading after Next despite label=''Episode 2'' (the reported bug).'
+  _note: Distinct-episode playback is observable because each episode's upstream HLS segments
+    live at different URLs; the app proxies them through /stream/proxy?u=<b64 upstream url>,
+    so decoding `u` reveals which episode is truly playing.
+notes: 'Root cause is at the hls.js/<video> media layer in ui/AnimePlayerApp.jsx, not the
+  (correct) label/index logic or the (correctly episode-keyed) server source cache. Recommended
+  fix: remount the <video> via key=`${animeId}:${episode}:${mode}` and/or fully detach+reset
+  media before loading the new source, so no stale MediaSource/buffer from the prior episode
+  survives. Spec written for the recommended scope (episode + mode + quality clean swap).
+  Spec-audit (sound=true) findings folded in: episode boundaries, mode/quality preservation
+  on episode switch, per-episode resume position, unavailable-variant fallback, a concrete
+  5s ''settled'' oracle with a shared-segment exclusion, and a skip-on-502 test precondition.
+  The allanime-502 resilience gap is explicitly out of scope.'
+verified: true

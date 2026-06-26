@@ -1,0 +1,6 @@
+kind: capability
+id: anime
+title: Anime
+behavior: The Anime capability lets a household member search the allanime catalog, browse
+  a title's episodes, and watch them in an embedded HLS player (sub/dub mode, quality selection,
+  resume position, and pop-out).
