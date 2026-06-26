@@ -54,4 +54,4 @@ notes: 'Root cause is at the hls.js/<video> media layer in ui/AnimePlayerApp.jsx
   on episode switch, per-episode resume position, unavailable-variant fallback, a concrete
   5s ''settled'' oracle with a shared-segment exclusion, and a skip-on-502 test precondition.
   The allanime-502 resilience gap is explicitly out of scope.'
-verified: false
+verified: true

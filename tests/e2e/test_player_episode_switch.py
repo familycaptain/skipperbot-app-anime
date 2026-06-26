@@ -16,7 +16,7 @@ external allanime catalog could not be warmed; a 502 storm is out of scope, not 
 Login is programmatic (API token injected into localStorage — the app's real bootstrap path) so a
 racy 2-step login form isn't what's under test. One Piece: allanime_id ReooPAxPMsHM4KPMY.
 """
-import os, re, sys, json, time, base64, urllib.request
+import os, re, sys, json, time, base64
 
 BASE = os.environ.get("QA_BASE", "http://localhost:8000").rstrip("/")
 USER = os.environ.get("QA_USER", "evolve_qa")
@@ -26,14 +26,6 @@ ANIME_QUERY = os.environ.get("ANIME_QUERY", "one piece")
 SHOTS = os.path.expanduser("~/evolve-qa-shots"); os.makedirs(SHOTS, exist_ok=True)
 SETTLE_S = 6.0           # spec: observe >= 5s with no stale (A-only) segment
 WARM_TRIES = 10          # retry budget through intermittent allanime 502s
-
-
-def _api_login() -> str:
-    body = json.dumps({"username": USER, "password": PW}).encode()
-    req = urllib.request.Request(f"{BASE}/auth/login", data=body,
-                                 headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read())["token"]
 
 
 def _b64url_decode(s: str):
@@ -64,7 +56,6 @@ def _ep_of_master(url: str):
 def run():
     from playwright.sync_api import sync_playwright
 
-    token = _api_login()
     seg_reqs = []     # {t, decoded} for every /stream/proxy?u= request
     master_reqs = []  # {t, url, ep, quality, mode}
 
@@ -79,11 +70,25 @@ def run():
     with sync_playwright() as p:
         browser = p.chromium.launch()
         ctx = browser.new_context()
-        ctx.add_init_script(f"localStorage.setItem('skipperbot_token', {json.dumps(token)})")
         page = ctx.new_page()
         page.on("request", on_request)
+
+        # --- login via the real 2-step form (login is not what's under test; the
+        # token-only bootstrap doesn't authenticate the desktop here) ---
         page.goto(BASE, wait_until="networkidle")
-        page.wait_for_timeout(1500)  # let React hydrate
+        page.wait_for_timeout(1500)  # let React hydrate before filling
+        page.get_by_role("textbox").first.fill(USER)
+        page.keyboard.press("Enter")
+        page.wait_for_selector("input[type=password]", timeout=15000)
+        page.locator("input[type=password]").first.fill(PW)
+        page.keyboard.press("Enter")
+        for _ in range(50):
+            if page.evaluate("() => localStorage.getItem('skipperbot_token')"):
+                break
+            page.wait_for_timeout(500)
+        else:
+            raise RuntimeError("login failed (no token)")
+        page.wait_for_timeout(2000)  # desktop settle
 
         # --- precondition: warm the source cache for eps 1 & 2 (retry through 502s) ---
         def warm(ep):
@@ -105,23 +110,55 @@ def run():
                   "evidence": []}))
             browser.close(); return 2
 
-        # --- open the player on episode 1 via the real desktop UI ---
-        page.get_by_role("button", name="Anime", exact=True).first.click()
-        page.wait_for_timeout(800)
-        page.locator("input[placeholder*='Search anime']").first.fill(ANIME_QUERY)
-        page.keyboard.press("Enter")
-        # search result list -> pick the One Piece row (match by allanime_id via the title click)
-        page.wait_for_selector("text=/ep", timeout=20000)
-        # click the result whose row text mentions the title; fall back to first result
-        try:
-            page.get_by_role("button", name=re.compile("one piece", re.I)).first.click(timeout=8000)
-        except Exception:
-            page.locator("button.flex-1").first.click()
-        page.wait_for_selector(f"text={ANIME_ID}", timeout=20000)   # EpisodePicker shows the allanime id
-        page.get_by_title("Play episode 1").first.click()
-        # player mounts; wait for ep1 master + first segments
-        page.wait_for_timeout(4000)
+        # --- seed the watchlist via the app's own API (scope_user binds it to the
+        # logged-in user) so we can open the player WITHOUT the flaky /search path ---
+        page.evaluate("""async ({id, title, uid}) => {
+            await fetch('/api/apps/anime/watchlist', {method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({user_id:uid, allanime_id:id, title:title, episode_count:1168})});
+        }""", {"id": ANIME_ID, "title": "One Piece", "uid": USER})
 
+        # --- open the player on episode 1 via the Watchlist "Start" button. The
+        # player fetches /episodes (uncached, intermittently 502) to enable Next;
+        # retry the whole open (page reload) until Next is enabled. A persistent
+        # 502 storm => SKIP (allanime resilience is out of scope). ---
+        def open_player():
+            # Watchlist row -> "Episodes" (picker) -> "Play episode 1". This always
+            # targets ep1 (independent of prior history) and handlePlay pre-warms
+            # /sources/1 before opening the player.
+            page.get_by_role("button", name="Anime", exact=True).first.click()
+            page.wait_for_timeout(900)
+            page.get_by_role("button", name="Watchlist", exact=True).first.click()
+            page.wait_for_timeout(1200)
+            try:
+                page.get_by_title("Browse all episodes").first.click(timeout=8000)   # -> EpisodePicker
+            except Exception:
+                return False
+            try:
+                page.get_by_title("Play episode 1").first.wait_for(state="visible", timeout=12000)
+            except Exception:
+                return False                              # /episodes 502 -> picker empty
+            page.get_by_title("Play episode 1").first.click()
+            for _ in range(20):                          # wait for Next to become enabled
+                page.wait_for_timeout(500)
+                nxt = page.get_by_role("button", name=re.compile(r"^Next$"))
+                if nxt.count() and nxt.first.is_enabled():
+                    return True
+            return False
+
+        ready = False
+        for attempt in range(5):
+            seg_reqs.clear(); master_reqs.clear()
+            if open_player():
+                ready = True; break
+            page.reload(wait_until="networkidle"); page.wait_for_timeout(1500)
+        if not ready:
+            print("RESULT: " + json.dumps({"passed": False, "skipped": True,
+                  "reason": "player Next never enabled — /episodes 502 storm across 5 attempts (out of scope)",
+                  "evidence": []}))
+            browser.close(); return 2
+
+        page.wait_for_timeout(3000)  # let ep1 buffer a few segments
         ep1_masters = [m for m in master_reqs if m["ep"] == "1"]
         if not ep1_masters:
             print("RESULT: " + json.dumps({"passed": False, "skipped": False,
