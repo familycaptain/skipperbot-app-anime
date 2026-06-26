@@ -1,0 +1,8 @@
+kind: feature
+id: anime.player
+title: Anime player
+behavior: The embedded player streams a selected episode through the app's HLS proxy and provides
+  episode navigation (Prev/Next and the episode picker), sub/dub mode + quality selection,
+  resume position, and a pop-out window.
+implements:
+- anime
