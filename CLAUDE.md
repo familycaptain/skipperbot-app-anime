@@ -40,5 +40,6 @@ details and the patterns to mirror):
 - Tests live in `tests/` and ship with the app: `python -m pytest tests/`.
 - To try the app on a platform: copy/clone this folder to
   `<platform>/apps/anime/` and restart the agent.
-- `specs/APP_PACKAGES.md` is a synced copy of the platform's canonical
-  contract — don't edit it here; it gets overwritten by the sync.
+- `specs/APP_PACKAGES.md` is a copy of the platform's canonical contract —
+  don't edit it here; when the platform's copy changes it is re-copied in
+  by hand (there is no automated sync).

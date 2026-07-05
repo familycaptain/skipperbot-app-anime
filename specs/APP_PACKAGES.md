@@ -3,9 +3,11 @@
 > **The canonical guide to building a Skipperbot app.**
 >
 > A verbatim copy of this file ships in every app repo at `specs/APP_PACKAGES.md`
-> so each app repo is self-sufficient for AI-assisted development. The
-> platform repo's copy is the source of truth; an automated CI sync keeps
-> all copies aligned.
+> (the scaffold copies it in at creation) so each app repo is self-sufficient
+> for AI-assisted development. The platform repo's copy is the **source of
+> truth** — there is no automated sync (app repos live wherever their authors
+> keep them), so when the canonical copy changes, re-copy it into your app
+> repos by hand.
 >
 > **Note:** `APP_PACKAGES.md` is primarily the canonical prompt guidance and
 > app contract for AI-assisted app generation and review. Human authors should
