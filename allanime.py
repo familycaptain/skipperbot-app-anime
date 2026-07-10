@@ -25,7 +25,9 @@ import base64
 import hashlib
 import json
 import logging
+import os
 import re
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -38,12 +40,24 @@ logger = logging.getLogger("apps.anime.allanime")
 # Constants (match ani-cli line-for-line)
 # ---------------------------------------------------------------------------
 
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0"
-ALLANIME_REFR = "https://allmanga.to"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0"
+ALLANIME_REFR = "https://youtu-chan.com"
 ALLANIME_BASE = "allanime.day"
 ALLANIME_API = f"https://api.{ALLANIME_BASE}/api"
-ALLANIME_KEY = hashlib.sha256(b"Xot36i3lK3:v1").digest()  # 32 bytes
+# 2026-07: allanime added an anti-bot gate (AA_CRYPTO_MISSING). The sources
+# query now requires an `aaReq` GCM token (see get_aa_req) AND the response
+# `tobeparsed` is CTR-encrypted under this NEW 32-byte key — no longer
+# sha256("Xot36i3lK3:v1"). Matches ani-cli PR #1779 / issue #1763.
+ALLANIME_KEY = bytes.fromhex(
+    "22196fa6afca95309fdabe9a3534b87cd2454e50efeabfcbdbdfd3de678b3982")
 PERSISTED_QUERY_HASH = "d405d0edd690624b66baba3068e0edc3ac90f1597d898a1ec8db4e5c43c00fec"
+
+# aaReq token knobs. These rotate on the upstream's cadence (the ani-cli author
+# flagged them "will very likely change soon"), so they're env-overridable — a
+# rotation is a config change, not a redeploy. Bump ANI_ALLANIME_EPOCH /
+# ANI_ALLANIME_BUILD_ID when AA_CRYPTO_MISSING returns.
+ALLANIME_EPOCH = int(os.environ.get("ANI_ALLANIME_EPOCH", "4128"))
+ALLANIME_BUILD_ID = os.environ.get("ANI_ALLANIME_BUILD_ID", "12")
 
 SEARCH_GQL = (
     "query( $search: SearchInput $limit: Int $page: Int "
@@ -144,6 +158,25 @@ def _client(referer: str = ALLANIME_REFR) -> httpx.AsyncClient:
         timeout=httpx.Timeout(20.0),
         follow_redirects=True,
     )
+
+
+def get_aa_req() -> str:
+    """Build the `aaReq` anti-bot token allanime now requires on the sources
+    query (AA_CRYPTO gate, 2026-07; mirrors ani-cli get_aa_req / PR #1779).
+
+    An AES-256-GCM blob: nonce = first 12 bytes of sha256("<epoch>:<buildId>:
+    <queryHash>:<ts>"); plaintext = a small JSON envelope; output framed as
+    0x01 || nonce || ciphertext || tag, base64. `ts` is the wall clock rounded
+    DOWN to a 5-minute bucket in ms (server tolerates the bucket).
+    """
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    ts = int(time.time()) // 300 * 300 * 1000
+    epoch, build_id, qh = ALLANIME_EPOCH, ALLANIME_BUILD_ID, PERSISTED_QUERY_HASH
+    nonce = hashlib.sha256(f"{epoch}:{build_id}:{qh}:{ts}".encode()).digest()[:12]
+    payload = f'{{"v":1,"ts":{ts},"epoch":{epoch},"buildId":"{build_id}","qh":"{qh}"}}'
+    ct_and_tag = AESGCM(ALLANIME_KEY).encrypt(nonce, payload.encode(), None)
+    return base64.b64encode(b"\x01" + nonce + ct_and_tag).decode()
 
 
 async def _post_gql(client: httpx.AsyncClient, variables: dict, query: str) -> dict:
@@ -407,26 +440,30 @@ async def sources(allanime_id: str, episode: str, mode: str = "sub") -> list[Str
     async with httpx.AsyncClient(
         headers={
             "User-Agent": USER_AGENT,
-            "Referer": "https://youtu-chan.com",
-            "Origin": "https://youtu-chan.com",
+            "Referer": ALLANIME_REFR,
+            "Origin": ALLANIME_REFR,
+            "x-build-id": ALLANIME_BUILD_ID,
         },
         timeout=20.0,
     ) as c1:
         try:
-            ext = {"persistedQuery": {"version": 1, "sha256Hash": PERSISTED_QUERY_HASH}}
+            # aaReq is the AA_CRYPTO anti-bot token (2026-07); without it the
+            # server returns AA_CRYPTO_MISSING and no sources.
+            ext = {
+                "persistedQuery": {"version": 1, "sha256Hash": PERSISTED_QUERY_HASH},
+                "aaReq": get_aa_req(),
+            }
             r = await c1.get(
                 ALLANIME_API,
                 params={"variables": json.dumps(variables), "extensions": json.dumps(ext)},
             )
             if r.status_code == 200 and "tobeparsed" in r.text:
                 api_resp_text = r.text
-        except httpx.HTTPError:
-            pass
-
-    if not api_resp_text:
-        async with _client() as c2:
-            data = await _post_gql(c2, variables, EMBED_GQL)
-            api_resp_text = json.dumps(data)
+            else:
+                logger.warning("anime sources: allanime GET %s — %s",
+                               r.status_code, r.text[:160])
+        except httpx.HTTPError as exc:
+            logger.warning("anime sources: allanime GET failed: %s", exc)
 
     # Extract provider lines
     if '"tobeparsed"' in api_resp_text:
