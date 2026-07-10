@@ -194,8 +194,15 @@ def _b64url_decode(s: str) -> str:
 
 
 def _rewrite_playlist(playlist_text: str, base_url: str, referer: str, request: Request) -> str:
-    """Replace every segment / sub-playlist URI with a proxy URL pinned to `referer`."""
-    proxy_base = str(request.url_for("anime_proxy_segment"))
+    """Replace every segment / sub-playlist URI with a proxy URL pinned to `referer`.
+
+    The proxy URL is a SAME-ORIGIN RELATIVE path — NOT request.url_for(), which
+    yields an absolute http:// URL behind a TLS-terminating reverse proxy (the
+    app sees internal HTTP) and gets blocked as mixed content on the https
+    player page → HLS levelLoadError. Matches the relative path the proxy's own
+    sub-playlist rewrite already uses.
+    """
+    proxy_base = "/api/apps/anime/stream/proxy"
     out_lines: list[str] = []
     for line in playlist_text.splitlines():
         stripped = line.strip()
