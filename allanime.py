@@ -275,8 +275,16 @@ def _decode_provider_path(encoded: str) -> str:
     return decoded.replace("/clock", "/clock.json")
 
 
+# The `tobeparsed` CTR key has flip-flopped between these two on AllAnime's
+# cadence (twice in one week, 2026-07): the long-standing sha256("Xot36i3lK3:v1")
+# and the 32-byte anti-bot key. Rather than hardcode whichever is live today and
+# get paged on the next flip, try both and keep the one that actually decodes —
+# self-healing across future rotations. Correct key = it yields "sourceUrl".
+_TOBEPARSED_KEYS = (_TOBEPARSED_KEY, ALLANIME_KEY)
+
+
 def _decrypt_tobeparsed(blob: str) -> str:
-    """AES-256-CTR decrypt of the `tobeparsed` blob.
+    """AES-256-CTR decrypt of the `tobeparsed` blob, trying each known key.
 
     Layout (matches decode_tobeparsed in ani-cli):
       byte 0       : skip (length marker)
@@ -291,10 +299,17 @@ def _decrypt_tobeparsed(blob: str) -> str:
     iv = raw[1:13]
     ct = raw[13:-16]
     counter_initial = iv + bytes([0, 0, 0, 2])
-    cipher = Cipher(algorithms.AES(_TOBEPARSED_KEY), modes.CTR(counter_initial))
-    decryptor = cipher.decryptor()
-    plain = decryptor.update(ct) + decryptor.finalize()
-    return plain.decode("utf-8", errors="replace")
+    last = ""
+    for key in _TOBEPARSED_KEYS:
+        decryptor = Cipher(algorithms.AES(key), modes.CTR(counter_initial)).decryptor()
+        last = (decryptor.update(ct) + decryptor.finalize()).decode("utf-8", errors="replace")
+        if "sourceUrl" in last:
+            return last
+    # None decoded cleanly — AllAnime likely rotated to a new key. Return the
+    # last attempt (empty provider lines) so the caller degrades gracefully;
+    # the WARNING makes the next rotation diagnosable instead of silent.
+    logger.warning("allanime: tobeparsed decoded with no known key — key rotated?")
+    return last
 
 
 _LINE_RE = re.compile(r'"sourceUrl":"([^"]+)".*?"sourceName":"([^"]+)"')
