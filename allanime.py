@@ -45,11 +45,18 @@ ALLANIME_REFR = "https://youtu-chan.com"
 ALLANIME_BASE = "allanime.day"
 ALLANIME_API = f"https://api.{ALLANIME_BASE}/api"
 # 2026-07: allanime added an anti-bot gate (AA_CRYPTO_MISSING). The sources
-# query now requires an `aaReq` GCM token (see get_aa_req) AND the response
-# `tobeparsed` is CTR-encrypted under this NEW 32-byte key — no longer
-# sha256("Xot36i3lK3:v1"). Matches ani-cli PR #1779 / issue #1763.
+# query now requires an `aaReq` GCM token (see get_aa_req), keyed by this
+# 32-byte anti-bot key. Matches ani-cli PR #1779 / issue #1763.
 ALLANIME_KEY = bytes.fromhex(
     "22196fa6afca95309fdabe9a3534b87cd2454e50efeabfcbdbdfd3de678b3982")
+# The response `tobeparsed` blob is a SEPARATE concern from the aaReq gate:
+# it is still CTR-encrypted under the long-standing sha256("Xot36i3lK3:v1")
+# key — NOT the anti-bot key above. (As of 2026-07-12 allanime also moved the
+# blob to the top level of `data`, next to an `_m` marker, instead of nesting
+# it under `data.episode.sourceUrls`; the tobeparsed regex + decrypt handle
+# either placement.) Decrypting it with the anti-bot key yields garbage, which
+# zeroes out every resolve — no provider lines, no streams. Verified live.
+_TOBEPARSED_KEY = hashlib.sha256(b"Xot36i3lK3:v1").digest()
 PERSISTED_QUERY_HASH = "d405d0edd690624b66baba3068e0edc3ac90f1597d898a1ec8db4e5c43c00fec"
 
 # aaReq token knobs. These rotate on the upstream's cadence (the ani-cli author
@@ -284,7 +291,7 @@ def _decrypt_tobeparsed(blob: str) -> str:
     iv = raw[1:13]
     ct = raw[13:-16]
     counter_initial = iv + bytes([0, 0, 0, 2])
-    cipher = Cipher(algorithms.AES(ALLANIME_KEY), modes.CTR(counter_initial))
+    cipher = Cipher(algorithms.AES(_TOBEPARSED_KEY), modes.CTR(counter_initial))
     decryptor = cipher.decryptor()
     plain = decryptor.update(ct) + decryptor.finalize()
     return plain.decode("utf-8", errors="replace")
@@ -349,7 +356,16 @@ async def _fetch_provider_streams(client: httpx.AsyncClient, provider_name: str,
             await asyncio.sleep(0.25 * (attempt + 1))
 
     if not body:
-        logger.warning("provider %s fetch failed after retries: %s", provider_name, last_err)
+        # A persistent upstream 5xx from a single source backend is expected
+        # flakiness, not an app error: allanime's Luf-Mp4 clock endpoint (the
+        # source we label "hianime") currently returns HTTP 500 for every id,
+        # while wixmp/sharepoint serve the same episode fine. It's handled
+        # gracefully — we return no streams for this one provider and the others
+        # cover playback — so this is DEBUG, not a per-resolve WARNING that
+        # spams the logs on every episode. (Kept, not removed: allanime rotates
+        # these backends and Luf-Mp4 is its default HLS source, so it may well
+        # come back; when it does this path lights up again with zero code change.)
+        logger.debug("provider %s fetch failed after retries: %s", provider_name, last_err)
         return []
 
     streams: list[Stream] = []
