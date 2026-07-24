@@ -6,7 +6,10 @@ Implements:
   - sources(id, ep, mode)         : resolves playable streams (the hard part)
 
 The source resolution mirrors ani-cli/get_episode_url:
-  1. POST GraphQL `episode_embed_gql` to api.allanime.day
+  0. Derive the anti-bot crypto (epoch + AES key) live from the app page/bundle
+     (see _scrape_crypto) — allanime rotates these on every redeploy
+  1. GET the persisted-query to the API host (api.mkissa.net since the 2026-07
+     move), signed with the runtime `aaReq` token
   2. If response carries `tobeparsed`, AES-256-CTR decrypt with key=sha256("Xot36i3lK3:v1")
   3. Each provider line is "<name> :<encoded_path>"; decode hex pairs via the
      provider lookup table to recover an `/apivtwo/clock?id=...` path
@@ -41,30 +44,29 @@ logger = logging.getLogger("apps.anime.allanime")
 # ---------------------------------------------------------------------------
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0"
-ALLANIME_REFR = "https://youtu-chan.com"
-ALLANIME_BASE = "allanime.day"
-ALLANIME_API = f"https://api.{ALLANIME_BASE}/api"
-# 2026-07: allanime added an anti-bot gate (AA_CRYPTO_MISSING). The sources
-# query now requires an `aaReq` GCM token (see get_aa_req), keyed by this
-# 32-byte anti-bot key. Matches ani-cli PR #1779 / issue #1763.
-ALLANIME_KEY = bytes.fromhex(
-    "22196fa6afca95309fdabe9a3534b87cd2454e50efeabfcbdbdfd3de678b3982")
-# The response `tobeparsed` blob is a SEPARATE concern from the aaReq gate:
-# it is still CTR-encrypted under the long-standing sha256("Xot36i3lK3:v1")
-# key — NOT the anti-bot key above. (As of 2026-07-12 allanime also moved the
-# blob to the top level of `data`, next to an `_m` marker, instead of nesting
-# it under `data.episode.sourceUrls`; the tobeparsed regex + decrypt handle
-# either placement.) Decrypting it with the anti-bot key yields garbage, which
-# zeroes out every resolve — no provider lines, no streams. Verified live.
-_TOBEPARSED_KEY = hashlib.sha256(b"Xot36i3lK3:v1").digest()
-PERSISTED_QUERY_HASH = "d405d0edd690624b66baba3068e0edc3ac90f1597d898a1ec8db4e5c43c00fec"
+# 2026-07: allanime moved its web app + API behind the mkissa.* domains. The API
+# host, the referer/origin the anti-bot checks, and the CDN that serves the app
+# bundle all live there now; only the provider `/clock` fetch still hits
+# allanime.day. Endpoints are env-overridable so a domain move is a config change,
+# not a redeploy.
+ALLANIME_REFR = os.environ.get("ANI_ALLANIME_REFR", "https://mkissa.to")
+ALLANIME_API = os.environ.get("ANI_ALLANIME_API", "https://api.mkissa.net/api")
+ALLANIME_CDN = os.environ.get(
+    "ANI_ALLANIME_CDN", "https://cdn.mkissa.net/all/mk/_app/immutable")
+ALLANIME_BASE = "allanime.day"   # provider /clock host — still allanime.day
 
-# aaReq token knobs. These rotate on the upstream's cadence (the ani-cli author
-# flagged them "will very likely change soon"), so they're env-overridable — a
-# rotation is a config change, not a redeploy. Bump ANI_ALLANIME_EPOCH /
-# ANI_ALLANIME_BUILD_ID when AA_CRYPTO_MISSING returns.
-ALLANIME_EPOCH = int(os.environ.get("ANI_ALLANIME_EPOCH", "4128"))
-ALLANIME_BUILD_ID = os.environ.get("ANI_ALLANIME_BUILD_ID", "12")
+# The response `tobeparsed` blob is CTR-encrypted under the long-standing
+# sha256("Xot36i3lK3:v1") key — a SEPARATE concern from the aaReq anti-bot gate,
+# whose GCM key is DERIVED AT RUNTIME (see _scrape_crypto). AllAnime has also
+# moved the blob to the top level of `data` (next to an `_m` marker) instead of
+# nesting it under `data.episode.sourceUrls`; the regex + decrypt handle either.
+_TOBEPARSED_KEY = hashlib.sha256(b"Xot36i3lK3:v1").digest()
+
+# The persisted-query hash the sources GET sends. Rotates when allanime redeploys
+# its app; env-overridable so a rotation is a config change.
+PERSISTED_QUERY_HASH = os.environ.get(
+    "ANI_ALLANIME_QUERY_HASH",
+    "f4662f4b7510b26795dd53ef824a0bf1740fbbc5d1273fab18222ac831bca8d0")
 
 SEARCH_GQL = (
     "query( $search: SearchInput $limit: Int $page: Int "
@@ -167,22 +169,77 @@ def _client(referer: str = ALLANIME_REFR) -> httpx.AsyncClient:
     )
 
 
-def get_aa_req() -> str:
-    """Build the `aaReq` anti-bot token allanime now requires on the sources
-    query (AA_CRYPTO gate, 2026-07; mirrors ani-cli get_aa_req / PR #1779).
+# --- anti-bot crypto material (epoch + AES key), derived at runtime -----------
+# allanime obfuscates the AES-256-GCM key that signs the aaReq anti-bot token:
+# the app page carries a base64 `partB`, the app's JS bundle carries a 64-hex
+# `mask`, and the real key is partB XOR mask. The `epoch` is a build counter on
+# the same page. BOTH rotate whenever allanime redeploys — which is exactly what
+# used to break this client every few weeks, each rotation needing a hand-edited
+# constant. Deriving them live (as ani-cli's fetch_keys does) turns a rotation
+# into a no-op instead of a page. Cached briefly since rotations are rare.
+_CRYPTO_TTL = 1800.0                       # re-scrape at most every 30 min
+_crypto_cache: "tuple[int, bytes] | None" = None
+_crypto_at = 0.0
+_crypto_lock = asyncio.Lock()
 
-    An AES-256-GCM blob: nonce = first 12 bytes of sha256("<epoch>:<buildId>:
-    <queryHash>:<ts>"); plaintext = a small JSON envelope; output framed as
-    0x01 || nonce || ciphertext || tag, base64. `ts` is the wall clock rounded
-    DOWN to a 5-minute bucket in ms (server tolerates the bucket).
-    """
+
+def _aa_code(text: str) -> str:
+    m = re.search(r'"code":"([^"]+)"', text)
+    return m.group(1) if m else f"HTTP-body {text[:80]}"
+
+
+async def _scrape_crypto(client: httpx.AsyncClient) -> "tuple[int, bytes]":
+    """Scrape (epoch, aes_key) from the live app. Raises RuntimeError if the page
+    or bundle shape changed, so the caller can surface a clear 'upstream layout
+    changed' signal rather than silently resolving to no sources."""
+    hdrs = {"User-Agent": USER_AGENT}
+    page = (await client.get(ALLANIME_REFR, headers=hdrs)).text
+    m_epoch = re.search(r'"epoch":(\d+)', page)
+    m_partb = re.search(r'"partB":"([^"]*)"', page)
+    m_app = re.search(re.escape(ALLANIME_CDN) + r"/entry/app\.[A-Za-z0-9_.-]+\.js", page)
+    if not (m_epoch and m_partb and m_app):
+        raise RuntimeError("allanime: app page shape changed (epoch/partB/app.js not found)")
+    part_b = base64.b64decode(m_partb.group(1))
+    app_js = (await client.get(m_app.group(0), headers=hdrs)).text
+    chunks = re.findall(r'"\.\./chunks/[A-Za-z0-9_.-]+\.js"', app_js)[:5]
+    masks: set[str] = set()
+    for ch in chunks:
+        url = f"{ALLANIME_CDN}/{ch.strip(chr(34))[3:]}"    # strip quotes + leading ".."
+        masks.update(re.findall(r"[0-9a-f]{64}", (await client.get(url, headers=hdrs)).text))
+    for hexmask in masks:
+        mask = bytes.fromhex(hexmask)
+        if len(mask) == len(part_b) == 32:
+            return int(m_epoch.group(1)), bytes(a ^ b for a, b in zip(mask, part_b))
+    raise RuntimeError("allanime: no 32-byte key mask found in app bundle")
+
+
+async def _get_crypto(client: httpx.AsyncClient, force: bool = False) -> "tuple[int, bytes]":
+    """Cached (epoch, key). force=True re-scrapes (used once on an AA_CRYPTO_* reply,
+    which means upstream redeployed and our cached material is stale)."""
+    global _crypto_cache, _crypto_at
+    async with _crypto_lock:
+        now = time.time()
+        if force or _crypto_cache is None or (now - _crypto_at) > _CRYPTO_TTL:
+            _crypto_cache = await _scrape_crypto(client)
+            _crypto_at = now
+        return _crypto_cache
+
+
+def get_aa_req(epoch: int, key: bytes) -> str:
+    """Build the `aaReq` anti-bot token allanime requires on the sources query
+    (AA_CRYPTO gate; mirrors ani-cli get_aa_req after the 2026-07 mkissa move).
+
+    AES-256-GCM: nonce = first 12 bytes of sha256("<epoch>:<queryHash>:<ts>");
+    plaintext = a small JSON envelope (no buildId post-migration); output framed
+    as 0x01 || nonce || ciphertext || tag, base64. `ts` is the wall clock floored
+    to a 5-minute bucket in ms. `epoch`/`key` come from _get_crypto."""
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
     ts = int(time.time()) // 300 * 300 * 1000
-    epoch, build_id, qh = ALLANIME_EPOCH, ALLANIME_BUILD_ID, PERSISTED_QUERY_HASH
-    nonce = hashlib.sha256(f"{epoch}:{build_id}:{qh}:{ts}".encode()).digest()[:12]
-    payload = f'{{"v":1,"ts":{ts},"epoch":{epoch},"buildId":"{build_id}","qh":"{qh}"}}'
-    ct_and_tag = AESGCM(ALLANIME_KEY).encrypt(nonce, payload.encode(), None)
+    qh = PERSISTED_QUERY_HASH
+    nonce = hashlib.sha256(f"{epoch}:{qh}:{ts}".encode()).digest()[:12]
+    payload = f'{{"v":1,"ts":{ts},"epoch":{epoch},"qh":"{qh}"}}'
+    ct_and_tag = AESGCM(key).encrypt(nonce, payload.encode(), None)
     return base64.b64encode(b"\x01" + nonce + ct_and_tag).decode()
 
 
@@ -275,16 +332,18 @@ def _decode_provider_path(encoded: str) -> str:
     return decoded.replace("/clock", "/clock.json")
 
 
-# The `tobeparsed` CTR key has flip-flopped between these two on AllAnime's
-# cadence (twice in one week, 2026-07): the long-standing sha256("Xot36i3lK3:v1")
-# and the 32-byte anti-bot key. Rather than hardcode whichever is live today and
-# get paged on the next flip, try both and keep the one that actually decodes —
-# self-healing across future rotations. Correct key = it yields "sourceUrl".
-_TOBEPARSED_KEYS = (_TOBEPARSED_KEY, ALLANIME_KEY)
+# The `tobeparsed` CTR key has flip-flopped on AllAnime's cadence (twice in one
+# week, 2026-07) between the long-standing sha256("Xot36i3lK3:v1") and the live
+# anti-bot key. Rather than hardcode whichever is live today and get paged on the
+# next flip, try the known static key plus whatever runtime anti-bot key the
+# caller passes, and keep the one that actually decodes — self-healing across
+# future rotations. Correct key = it yields "sourceUrl".
+_TOBEPARSED_KEYS = (_TOBEPARSED_KEY,)
 
 
-def _decrypt_tobeparsed(blob: str) -> str:
-    """AES-256-CTR decrypt of the `tobeparsed` blob, trying each known key.
+def _decrypt_tobeparsed(blob: str, extra_keys: tuple = ()) -> str:
+    """AES-256-CTR decrypt of the `tobeparsed` blob, trying each known key
+    (the static key first, then any runtime `extra_keys` the caller supplies).
 
     Layout (matches decode_tobeparsed in ani-cli):
       byte 0       : skip (length marker)
@@ -300,7 +359,7 @@ def _decrypt_tobeparsed(blob: str) -> str:
     ct = raw[13:-16]
     counter_initial = iv + bytes([0, 0, 0, 2])
     last = ""
-    for key in _TOBEPARSED_KEYS:
+    for key in _TOBEPARSED_KEYS + tuple(extra_keys):
         decryptor = Cipher(algorithms.AES(key), modes.CTR(counter_initial)).decryptor()
         last = (decryptor.update(ct) + decryptor.finalize()).decode("utf-8", errors="replace")
         if "sourceUrl" in last:
@@ -466,42 +525,55 @@ async def sources(allanime_id: str, episode: str, mode: str = "sub") -> list[Str
         "episodeString": str(episode),
     }
 
-    # Try persisted-query GET first (matches ani-cli's primary path), then fall back to POST.
+    # Persisted-query GET, signed with the runtime aaReq anti-bot token. An
+    # AA_CRYPTO_* reply means upstream redeployed and our cached crypto material
+    # is stale, so re-scrape once (force=True) and retry before giving up.
     api_resp_text = ""
+    aa_key: bytes | None = None
     async with httpx.AsyncClient(
         headers={
             "User-Agent": USER_AGENT,
             "Referer": ALLANIME_REFR,
             "Origin": ALLANIME_REFR,
-            "x-build-id": ALLANIME_BUILD_ID,
         },
         timeout=20.0,
     ) as c1:
-        try:
-            # aaReq is the AA_CRYPTO anti-bot token (2026-07); without it the
-            # server returns AA_CRYPTO_MISSING and no sources.
-            ext = {
-                "persistedQuery": {"version": 1, "sha256Hash": PERSISTED_QUERY_HASH},
-                "aaReq": get_aa_req(),
-            }
-            r = await c1.get(
-                ALLANIME_API,
-                params={"variables": json.dumps(variables), "extensions": json.dumps(ext)},
-            )
-            if r.status_code == 200 and "tobeparsed" in r.text:
-                api_resp_text = r.text
-            else:
+        for attempt in range(2):
+            try:
+                epoch, aa_key = await _get_crypto(c1, force=(attempt == 1))
+                ext = {
+                    "persistedQuery": {"version": 1, "sha256Hash": PERSISTED_QUERY_HASH},
+                    "aaReq": get_aa_req(epoch, aa_key),
+                }
+                r = await c1.get(
+                    ALLANIME_API,
+                    params={"variables": json.dumps(variables), "extensions": json.dumps(ext)},
+                )
+                if r.status_code == 200 and "tobeparsed" in r.text:
+                    api_resp_text = r.text
+                    break
+                if "AA_CRYPTO" in r.text and attempt == 0:
+                    logger.info("anime sources: %s — re-scraping crypto and retrying",
+                                _aa_code(r.text))
+                    continue
                 logger.warning("anime sources: allanime GET %s — %s",
                                r.status_code, r.text[:160])
-        except httpx.HTTPError as exc:
-            logger.warning("anime sources: allanime GET failed: %s", exc)
+                break
+            except RuntimeError as exc:            # crypto scrape failed (layout changed)
+                logger.warning("anime sources: %s", exc)
+                break
+            except httpx.HTTPError as exc:
+                logger.warning("anime sources: allanime GET failed: %s", exc)
+                break
 
-    # Extract provider lines
+    # Extract provider lines. The tobeparsed blob's CTR key has historically been
+    # the live anti-bot key, so offer the runtime key as a self-healing candidate.
+    extra = (aa_key,) if aa_key else ()
     if '"tobeparsed"' in api_resp_text:
         m = re.search(r'"tobeparsed":"([^"]+)"', api_resp_text)
         if not m:
             return []
-        decrypted = _decrypt_tobeparsed(m.group(1))
+        decrypted = _decrypt_tobeparsed(m.group(1), extra_keys=extra)
         provider_lines = _extract_provider_lines(decrypted)
     else:
         provider_lines = _extract_provider_lines(api_resp_text)
