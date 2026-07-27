@@ -1,0 +1,17 @@
+kind: specification
+id: anime.progress.position-is-remembered
+title: Where you got to is remembered
+state: live
+autonomy: gated
+behavior: >
+  While an episode plays, how far into it the person has got is saved periodically, so closing the
+  tab and coming back later resumes near where they stopped rather than at the beginning. Saving is
+  best-effort and silent: a save that fails never interrupts what is playing and never puts an
+  error in front of the viewer.
+implements:
+- ui/AnimePlayerApp.jsx::AnimePlayerApp
+- routes.py::api_record_watch
+- data.py::record_watch
+tests: []
+links: {}
+notes: ''

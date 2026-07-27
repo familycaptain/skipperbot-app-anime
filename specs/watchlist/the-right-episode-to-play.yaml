@@ -1,0 +1,15 @@
+kind: specification
+id: anime.watchlist.the-right-episode-to-play
+title: Play from the watchlist starts the right episode
+state: live
+autonomy: gated
+behavior: >
+  Playing straight from the watchlist starts the episode that makes sense: the first one if the
+  show was never started, the same one again if it is part-way through, and the following one if
+  the last was finished. If the catalog cannot say what follows, the last watched episode plays
+  rather than nothing happening.
+implements:
+- ui/AnimeApp.jsx::WatchlistTab
+tests: []
+links: {}
+notes: ''

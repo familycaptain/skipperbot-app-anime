@@ -1,0 +1,14 @@
+kind: specification
+id: anime.popout.popout-that-never-opened
+title: A blocked window still leaves a way back
+state: live
+autonomy: gated
+behavior: >
+  If the browser blocks the new window so it never appears, the app still offers to resume
+  playback in place. Nobody is left with a stopped player, no window, and no way to start watching
+  again short of reopening the show.
+implements:
+- ui/AnimePlayerApp.jsx::popOut
+tests: []
+links: {}
+notes: ''

@@ -1,0 +1,15 @@
+kind: specification
+id: anime.progress.one-entry-per-show
+title: One history entry per show, not per viewing
+state: live
+autonomy: gated
+behavior: >
+  History holds one entry per show per person — the latest episode, language and position — rather
+  than one per viewing. Working through a long series or rewatching never fills the list with
+  duplicates of the same show, and the entry moves to the top each time it is watched.
+implements:
+- data.py::record_watch
+- data.py::get_history
+tests: []
+links: {}
+notes: ''

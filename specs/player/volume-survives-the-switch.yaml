@@ -1,0 +1,13 @@
+kind: specification
+id: anime.player.volume-survives-the-switch
+title: Volume is not reset by changing episode
+state: live
+autonomy: gated
+behavior: >
+  The volume and mute a person set stay where they put them when the episode changes; nobody is
+  startled by the next episode starting at full volume because the player rebuilt itself.
+implements:
+- ui/AnimePlayerApp.jsx::AnimePlayerApp
+tests: []
+links: {}
+notes: ''

@@ -1,0 +1,14 @@
+kind: specification
+id: anime.popout.popout-without-a-person
+title: The pop-out refuses to play for nobody
+state: live
+autonomy: gated
+behavior: >
+  Opened without a show, or without knowing which person is watching, the pop-out plays nothing and
+  says which of the two is missing. Watching is never attributed to nobody, and no progress is
+  recorded for an unknown viewer.
+implements:
+- static/anime-player.html
+tests: []
+links: {}
+notes: ''

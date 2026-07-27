@@ -1,0 +1,16 @@
+kind: specification
+id: anime.catalog.episode-that-will-not-open
+title: An episode that cannot be resolved never opens a player
+state: live
+autonomy: gated
+behavior: >
+  Choosing an episode resolves a playable stream BEFORE the player opens. If nothing can be
+  resolved, the person is told at the point they clicked, with the reason, and stays on the episode
+  list — a player is never opened onto a black frame they then have to close. While one episode is
+  being resolved the rest of the list cannot be clicked, so two episodes are never started at once.
+implements:
+- ui/AnimeApp.jsx::EpisodePicker
+- routes.py::api_sources
+tests: []
+links: {}
+notes: ''

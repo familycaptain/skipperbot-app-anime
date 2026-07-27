@@ -1,0 +1,19 @@
+kind: specification
+id: anime.watchlist.saved-shows-show-progress
+title: Saved shows show how far in you are
+state: live
+autonomy: gated
+behavior: >
+  Every saved show shows where that person is with it: not started, part-way through a numbered
+  episode in a named language, or finished. Progress comes from what they have actually watched, so
+  a show saved but never played reads as not started, and a show watched without ever being saved
+  does not appear here at all.
+implements:
+- data.py::get_watchlist
+- ui/AnimeApp.jsx::WatchlistTab
+- tools.py::anime_watchlist
+tests: []
+links: {}
+notes: >
+  History and watchlist are deliberately separate: one is what you did, the other is what you
+  intend to do, and people ask for them by different names.

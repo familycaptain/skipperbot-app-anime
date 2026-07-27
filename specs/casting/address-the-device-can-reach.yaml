@@ -1,0 +1,16 @@
+kind: specification
+id: anime.casting.address-the-device-can-reach
+title: Casting needs an address the television can reach
+state: live
+autonomy: gated
+behavior: >
+  A television fetches the video itself, so casting needs an address for this install that a device
+  on the house network can open. With none configured, Skipper refuses and says where to set it,
+  rather than handing the device a link it cannot follow and reporting success. Where both a local
+  and a public address are configured, the local one is used so the video does not leave and
+  re-enter the house.
+implements:
+- tools.py::cast_anime_episode
+tests: []
+links: {}
+notes: ''

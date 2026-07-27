@@ -1,0 +1,18 @@
+kind: specification
+id: anime.player.quality-choice
+title: Pick a quality the episode actually has
+state: live
+autonomy: gated
+behavior: >
+  The quality menu offers only the resolutions this particular episode was resolved at, highest
+  first, plus an automatic option that lets the stream follow the connection. When the episode
+  arrives with named resolutions the highest is selected to begin with; when it arrives as a single
+  adaptive stream, automatic is the only choice offered. Choosing a quality reloads the picture at
+  that resolution without leaving the episode.
+implements:
+- ui/AnimePlayerApp.jsx::qualityOptions
+- allanime.py::pick_quality
+- routes.py::anime_master_playlist
+tests: []
+links: {}
+notes: ''

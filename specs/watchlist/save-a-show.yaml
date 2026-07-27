@@ -1,0 +1,18 @@
+kind: specification
+id: anime.watchlist.save-a-show
+title: Save a show for later
+state: live
+autonomy: gated
+behavior: >
+  A show can be saved from the search results, from its episode list, or by asking Skipper, and
+  appears on that person's watchlist at once. Saving one that is already saved changes nothing
+  except to refresh its title and episode count — it is never added twice and never reported as an
+  error.
+implements:
+- data.py::add_to_watchlist
+- routes.py::api_add_watchlist
+- ui/AnimeApp.jsx::toggleWatchlist
+- tools.py::anime_watchlist_add
+tests: []
+links: {}
+notes: ''

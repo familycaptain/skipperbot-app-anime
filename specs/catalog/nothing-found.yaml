@@ -1,0 +1,15 @@
+kind: specification
+id: anime.catalog.nothing-found
+title: Nothing found says nothing found
+state: live
+autonomy: gated
+behavior: >
+  A search that matches nothing says so in words, and the previous results are cleared rather than
+  left on screen. Asked in chat, Skipper says nothing was found for that name in that language. A
+  misspelling is therefore always distinguishable from a catalog that failed to answer.
+implements:
+- ui/AnimeApp.jsx::BrowseTab
+- tools.py::anime_search
+tests: []
+links: {}
+notes: ''

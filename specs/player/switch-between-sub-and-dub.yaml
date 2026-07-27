@@ -1,0 +1,17 @@
+kind: specification
+id: anime.player.switch-between-sub-and-dub
+title: Switch a running episode between sub and dub
+state: live
+autonomy: gated
+behavior: >
+  Switching between subtitled and dubbed while watching re-resolves the same episode in the other
+  language and plays that. Because the two are different catalogs, the episode list is reloaded at
+  the same time; if the show has no episodes at all in the language chosen, the player reports
+  there is nothing playable rather than continuing in the old language under a label claiming
+  otherwise.
+implements:
+- ui/AnimePlayerApp.jsx::AnimePlayerApp
+- static/anime-player.html::loadEpisodes
+tests: []
+links: {}
+notes: ''

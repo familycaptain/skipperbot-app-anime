@@ -1,0 +1,14 @@
+kind: specification
+id: anime.progress.nothing-watched-yet
+title: No history says no history
+state: live
+autonomy: gated
+behavior: >
+  A person who has watched nothing sees a plain statement to that effect, in the app and in chat,
+  rather than an empty list that could equally mean the lookup failed.
+implements:
+- ui/AnimeApp.jsx::HistoryTab
+- tools.py::anime_history
+tests: []
+links: {}
+notes: ''

@@ -1,0 +1,18 @@
+kind: specification
+id: anime.catalog.sub-or-dub-changes-the-catalogue
+title: Sub and dub are different catalogs
+state: live
+autonomy: gated
+behavior: >
+  Subtitled and dubbed are chosen before searching and they change what exists, not just how it
+  sounds: the same query returns a different set of shows and different episode counts in each,
+  because a show dubbed into English commonly has far fewer episodes than the subtitled original,
+  or none at all. Changing the choice re-asks the catalog rather than filtering what is already on
+  screen.
+implements:
+- allanime.py::search
+- allanime.py::episodes
+- ui/AnimeApp.jsx::BrowseTab
+tests: []
+links: {}
+notes: ''

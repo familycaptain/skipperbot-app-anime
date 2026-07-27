@@ -1,0 +1,15 @@
+kind: specification
+id: anime.casting.cast-to-a-device
+title: Play an episode on a device in the house
+state: live
+autonomy: gated
+behavior: >
+  Asked to play an episode on a device people name in the way they actually talk about it — the tv,
+  the chromecast, the roku — Skipper resolves the episode, finds that device, and starts it playing
+  there, reporting the show, episode, language and quality it sent. An episode it cannot resolve is
+  reported before any device is contacted.
+implements:
+- tools.py::cast_anime_episode
+tests: []
+links: {}
+notes: ''

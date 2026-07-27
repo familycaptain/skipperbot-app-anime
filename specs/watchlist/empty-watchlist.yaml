@@ -1,0 +1,14 @@
+kind: specification
+id: anime.watchlist.empty-watchlist
+title: An empty watchlist explains itself
+state: live
+autonomy: gated
+behavior: >
+  A person with nothing saved is told the list is empty and how to add to it, in the app and in
+  chat, rather than being shown a blank panel.
+implements:
+- ui/AnimeApp.jsx::WatchlistTab
+- tools.py::anime_watchlist
+tests: []
+links: {}
+notes: ''

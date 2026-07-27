@@ -1,0 +1,13 @@
+kind: specification
+id: anime.watchlist.unfinished-first
+title: What you are in the middle of comes first
+state: live
+autonomy: gated
+behavior: >
+  The watchlist puts shows that are part-way through at the top, so what someone is actually in the
+  middle of is the first thing they see. Everything else follows, most recently saved first.
+implements:
+- data.py::get_watchlist
+tests: []
+links: {}
+notes: ''

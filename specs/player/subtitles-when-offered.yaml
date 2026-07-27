@@ -1,0 +1,17 @@
+kind: specification
+id: anime.player.subtitles-when-offered
+title: Subtitles when the source carries them
+state: live
+autonomy: gated
+behavior: >
+  When the resolved stream carries an English subtitle track it is attached to the player and on by
+  default; when it does not, no subtitle control appears and playback is otherwise identical.
+  Subtitles are fetched by the house and relayed like the video, so they load wherever the video
+  does.
+implements:
+- ui/AnimePlayerApp.jsx::AnimePlayerApp
+- allanime.py::_fetch_provider_streams
+- routes.py::anime_proxy_segment
+tests: []
+links: {}
+notes: ''

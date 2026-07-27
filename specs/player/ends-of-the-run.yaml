@@ -1,0 +1,16 @@
+kind: specification
+id: anime.player.ends-of-the-run
+title: The first and last episodes are the ends
+state: live
+autonomy: gated
+behavior: >
+  On the first episode there is no previous, and on the last there is no next: both controls are
+  visibly unavailable rather than silently doing nothing, and neither wraps around to the other end
+  of the show. Pressing them tears nothing down and reloads nothing, so what is playing keeps
+  playing.
+implements:
+- ui/AnimePlayerApp.jsx::AnimePlayerApp
+- static/anime-player.html
+tests: []
+links: {}
+notes: ''

@@ -1,0 +1,19 @@
+kind: specification
+id: anime.upstream.resolved-streams-go-stale
+title: A resolved stream is good for minutes, not hours
+state: live
+autonomy: gated
+behavior: >
+  A stream resolved for an episode is reused for a few minutes, so re-opening the same episode in
+  the same language starts immediately instead of repeating the whole resolution. After that it is
+  resolved from the catalog again, because the links the catalog hands out stop working. Someone
+  who leaves an episode paused for a long time may find it fails to continue and has to ask for it
+  again.
+implements:
+- data.py::store_sources
+- data.py::get_cached_sources
+- data.py::SOURCE_CACHE_TTL_SECONDS
+- routes.py::api_sources
+tests: []
+links: {}
+notes: ''

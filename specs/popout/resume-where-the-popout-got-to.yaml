@@ -1,0 +1,16 @@
+kind: specification
+id: anime.popout.resume-where-the-popout-got-to
+title: Come back to where the pop-out got to
+state: live
+autonomy: gated
+behavior: >
+  Bringing playback back into the app resumes the same episode at the position the pop-out reached,
+  not the position it left at, and closes the pop-out if it is still open. It works whether the
+  pop-out is still open or the person already closed it themselves, so there is no state in which
+  the app and the window are both stopped.
+implements:
+- ui/AnimePlayerApp.jsx::resumeHere
+- static/anime-player.html::postPositionToOpener
+tests: []
+links: {}
+notes: ''

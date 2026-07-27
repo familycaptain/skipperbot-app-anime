@@ -1,0 +1,18 @@
+kind: specification
+id: anime.progress.history-is-personal
+title: Everyone's watching is their own
+state: live
+autonomy: gated
+behavior: >
+  Each person sees only their own history, watchlist and positions: two people watching the same
+  show hold separate places in it and neither sees the other's. A request over the web for someone
+  else's watching is refused, except from a parent or an admin, who may ask about another member.
+implements:
+- routes.py::api_history
+- routes.py::api_get_watchlist
+- data.py::get_history
+tests: []
+links: {}
+notes: >
+  What someone watches is treated as personal to them rather than household-shared, which is why
+  every read is scoped to the person asking rather than to the household.

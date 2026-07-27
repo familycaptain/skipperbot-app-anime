@@ -1,6 +1,16 @@
 kind: capability
 id: anime
 title: Anime
-behavior: The Anime capability lets a household member search the allanime catalog, browse
-  a title's episodes, and watch them in an embedded HLS player (sub/dub mode, quality selection,
-  resume position, and pop-out).
+app: anime
+scope: >
+  Watching anime from a public third-party catalog, inside the house: finding a show, picking an
+  episode, playing it in an embedded player (sub or dub, chosen quality, subtitles, its own window),
+  and remembering per person what they saved and where they got to. Optional and separately
+  installed, so a household that does not want third-party streaming simply does not have it. Anime
+  does NOT own the catalog (it belongs to someone else and may be unreachable or changed at any
+  time), the video itself (nothing is downloaded or kept), or the television (casting hands off to
+  the Home Assistant app when that is installed).
+state: live
+autonomy: gated
+links: {}
+notes: ''

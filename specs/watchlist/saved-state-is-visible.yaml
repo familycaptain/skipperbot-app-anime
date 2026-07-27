@@ -1,0 +1,15 @@
+kind: specification
+id: anime.watchlist.saved-state-is-visible
+title: You can see what you have already saved
+state: live
+autonomy: gated
+behavior: >
+  Wherever a show appears — in search results or on its own episode list — it shows whether it is
+  already on that person's watchlist, and the mark changes as soon as it is saved or removed,
+  including when that happened in another window.
+implements:
+- ui/AnimeApp.jsx::useWatchlistSet
+- routes.py::api_check_watchlist
+tests: []
+links: {}
+notes: ''

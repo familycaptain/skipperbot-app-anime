@@ -1,0 +1,17 @@
+kind: specification
+id: anime.progress.history-updates-itself
+title: Lists update themselves as things are watched
+state: live
+autonomy: gated
+behavior: >
+  Starting an episode, or saving and removing a show, updates the history and watchlist views that
+  are already open without anyone refreshing the page — including in a second window belonging to
+  the same person.
+implements:
+- routes.py::_broadcast
+- routes.py::anime_events
+- ui/AnimeApp.jsx::HistoryTab
+- ui/AnimeApp.jsx::useWatchlistSet
+tests: []
+links: {}
+notes: ''

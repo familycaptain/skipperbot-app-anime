@@ -1,0 +1,14 @@
+kind: specification
+id: anime.casting.the-default-device
+title: No device named means the usual one
+state: live
+autonomy: gated
+behavior: >
+  When someone asks to cast without naming a device, the household's Chromecast is used. A
+  different device is chosen only when the person actually names one, so "put it on the TV" never
+  becomes a guess.
+implements:
+- tools.py::cast_anime_episode
+tests: []
+links: {}
+notes: ''

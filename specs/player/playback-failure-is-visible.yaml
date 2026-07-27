@@ -1,0 +1,16 @@
+kind: specification
+id: anime.player.playback-failure-is-visible
+title: A stream that dies mid-episode says so
+state: live
+autonomy: gated
+behavior: >
+  A failure after playback has started — the video host refusing a piece of the stream, links
+  expiring part-way through — puts a visible message over the player naming what went wrong,
+  instead of the picture simply stopping. The player stays open with its controls usable, so the
+  person can ask for the stream again or move to another episode without reopening anything.
+implements:
+- ui/AnimePlayerApp.jsx::AnimePlayerApp
+- static/anime-player.html::setError
+tests: []
+links: {}
+notes: ''

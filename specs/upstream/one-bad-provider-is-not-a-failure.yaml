@@ -1,0 +1,16 @@
+kind: specification
+id: anime.upstream.one-bad-provider-is-not-a-failure
+title: One dead video host is not a dead episode
+state: live
+autonomy: gated
+behavior: >
+  An episode is usually offered by several video hosts. One that is down, slow or unreadable is
+  retried briefly, then skipped, and the others are used — the person sees an episode that simply
+  plays. Only when every host for that episode fails is anything reported as unplayable, and hosts
+  this app cannot handle at all are passed over silently rather than offered and then failing.
+implements:
+- allanime.py::_fetch_provider_streams
+- allanime.py::sources
+tests: []
+links: {}
+notes: ''

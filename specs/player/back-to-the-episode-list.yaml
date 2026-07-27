@@ -1,0 +1,15 @@
+kind: specification
+id: anime.player.back-to-the-episode-list
+title: Get back to the whole episode list from the player
+state: live
+autonomy: gated
+behavior: >
+  From the player one control opens the full episode list for the show being watched, in the
+  language being watched, already on that show — so jumping to a distant episode never means
+  searching for the show again.
+implements:
+- ui/AnimePlayerApp.jsx::AnimePlayerApp
+- ui/AnimeApp.jsx::AnimeApp
+tests: []
+links: {}
+notes: ''

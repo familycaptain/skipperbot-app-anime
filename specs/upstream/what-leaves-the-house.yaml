@@ -1,0 +1,19 @@
+kind: specification
+id: anime.upstream.what-leaves-the-house
+title: Only the question leaves the house
+state: live
+autonomy: gated
+behavior: >
+  Asking the catalog anything sends only what the question needs: the search text, a show's
+  identifier, an episode number, and whether sub or dub. No member's name, no household identifier
+  and nothing about what anyone has watched, saved or asked for is ever sent, and the catalog is
+  never told who is asking.
+implements:
+- allanime.py::search
+- allanime.py::episodes
+- allanime.py::sources
+tests: []
+links: {}
+notes: >
+  The catalog is a third party the household has no relationship with; keeping the request
+  contentless is what stops installing this app from disclosing who lives here and what they watch.

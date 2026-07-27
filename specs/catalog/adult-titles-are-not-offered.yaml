@@ -1,0 +1,15 @@
+kind: specification
+id: anime.catalog.adult-titles-are-not-offered
+title: Adult titles are never offered
+state: live
+autonomy: gated
+behavior: >
+  A search never returns titles the catalog marks as adult, nor ones it cannot classify, whatever
+  was typed and whoever typed it. There is no setting anywhere in the app that turns this off.
+implements:
+- allanime.py::search
+tests: []
+links: {}
+notes: >
+  Skipper is a household assistant that children use; the operator's choice is that the catalog's
+  own adult flag is honoured unconditionally rather than exposed as a per-person preference.

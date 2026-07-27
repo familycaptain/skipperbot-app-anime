@@ -1,0 +1,19 @@
+kind: specification
+id: anime.catalog.catalog-unreachable
+title: An unreachable catalog is reported, not disguised
+state: live
+autonomy: gated
+behavior: >
+  When the catalog cannot be reached or refuses the request, the failure is shown where the results
+  would have been and is attributed to the upstream catalog. A failed search or a failed episode
+  lookup is never rendered as "no results" or as an empty episode list. Nothing is left broken:
+  asking again once upstream recovers is all that is required, and the rest of the app — watchlist,
+  history, an episode already playing — carries on unaffected.
+implements:
+- routes.py::api_search
+- routes.py::api_episodes
+- ui/AnimeApp.jsx::BrowseTab
+- tools.py::anime_search
+tests: []
+links: {}
+notes: ''

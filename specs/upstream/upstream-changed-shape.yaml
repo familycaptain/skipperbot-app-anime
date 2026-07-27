@@ -1,0 +1,21 @@
+kind: specification
+id: anime.upstream.upstream-changed-shape
+title: A changed catalog is a failure to resolve, not a missing episode
+state: live
+autonomy: gated
+behavior: >
+  When the catalog changes in a way this app cannot follow — a moved endpoint, a rewritten page, a
+  scheme it no longer recognises — the person is told the episode could not be resolved right now,
+  never that the episode does not exist or that the show is unavailable. What changed is recorded
+  well enough that whoever maintains the install can tell an upstream change from a broken install
+  without reading the code. Episodes already resolved keep playing.
+implements:
+- allanime.py::_scrape_crypto
+- allanime.py::_decrypt_tobeparsed
+- allanime.py::sources
+tests: []
+links: {}
+notes: >
+  This app has twice gone dark with "no playable sources" after an upstream change; telling "we
+  cannot read the catalog today" apart from "that episode does not exist" is what makes the next
+  one diagnosable rather than mysterious.

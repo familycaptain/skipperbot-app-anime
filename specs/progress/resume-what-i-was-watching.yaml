@@ -1,0 +1,16 @@
+kind: specification
+id: anime.progress.resume-what-i-was-watching
+title: Pick up what I was watching
+state: live
+autonomy: gated
+behavior: >
+  Asked what they were watching, a person is taken back to the most recent show they have not
+  finished, at the episode they stopped on. If they finished that episode, the next one is offered
+  instead; if the catalog cannot say what comes next, the finished episode is replayed rather than
+  nothing happening. With nothing watched yet, Skipper says so and points at searching.
+implements:
+- tools.py::anime_resume
+- ui/AnimeApp.jsx::HistoryTab
+tests: []
+links: {}
+notes: ''

@@ -1,0 +1,17 @@
+kind: specification
+id: anime.player.ask-for-the-stream-again
+title: Ask for the stream again without losing your place in the app
+state: live
+autonomy: gated
+behavior: >
+  The player always offers a way to fetch the episode's sources again and rebuild the picture,
+  which is the recovery after an error message. It neither closes the player nor changes which
+  episode is open. Within the few minutes a resolved stream is kept it replays what was already
+  resolved; after that it goes back to the catalog.
+implements:
+- ui/AnimePlayerApp.jsx::resolveSources
+- static/anime-player.html::loadSources
+- routes.py::api_sources
+tests: []
+links: {}
+notes: ''

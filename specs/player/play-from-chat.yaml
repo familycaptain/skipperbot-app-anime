@@ -1,0 +1,16 @@
+kind: specification
+id: anime.player.play-from-chat
+title: Ask Skipper to play it
+state: live
+autonomy: gated
+behavior: >
+  Asked to play a named show and episode, Skipper resolves it first and then opens the player
+  already on that episode in the language asked for, saying which qualities it found. If it cannot
+  resolve a stream, it says so in the conversation and opens nothing, so the person is never sent
+  to a player that cannot play.
+implements:
+- tools.py::anime_play
+- tools.py::anime_episodes
+tests: []
+links: {}
+notes: ''

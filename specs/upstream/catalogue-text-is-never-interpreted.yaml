@@ -1,0 +1,19 @@
+kind: specification
+id: anime.upstream.catalogue-text-is-never-interpreted
+title: Text from the catalog is displayed, never interpreted
+state: live
+autonomy: gated
+behavior: >
+  Titles and any other text the catalog returns are shown as text wherever they appear — search
+  results, episode lists, the player's heading, the window title, history and watchlist entries. A
+  title containing markup or a script appears literally as those characters. Nothing arriving from
+  the catalog, and nothing stored from it afterwards, can add to or run in any page in the house.
+implements:
+- ui/AnimeApp.jsx::BrowseTab
+- ui/AnimePlayerApp.jsx::AnimePlayerApp
+- static/anime-player.html::refreshHeader
+tests: []
+links: {}
+notes: >
+  Everything on screen here originates with a third party nobody in the household controls, so its
+  text is treated as untrusted input rather than as content to render.

@@ -1,0 +1,17 @@
+kind: specification
+id: anime.popout.pop-out-a-window
+title: Pop the episode out into its own window
+state: live
+autonomy: gated
+behavior: >
+  Popping out opens the same episode in a separate browser window, starting at the position the
+  embedded player had reached, and the embedded player stops — so the same episode is never audible
+  twice at once. The new window carries the show's title, the episode label and its own controls,
+  and the app it came from shows that playback moved rather than looking broken.
+implements:
+- ui/AnimePlayerApp.jsx::popOut
+- routes.py::serve_player_page
+- static/anime-player.html
+tests: []
+links: {}
+notes: ''

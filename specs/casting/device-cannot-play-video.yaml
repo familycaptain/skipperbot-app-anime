@@ -1,0 +1,15 @@
+kind: specification
+id: anime.casting.device-cannot-play-video
+title: A device that cannot play video is named, not guessed at
+state: live
+autonomy: gated
+behavior: >
+  A name matching no known device, or a device with nothing on it that plays video, is reported
+  with what was actually found and what to do about it — including that some televisions must be
+  cast to through their built-in casting device rather than through the television's own control.
+  The request is never reported as sent.
+implements:
+- tools.py::cast_anime_episode
+tests: []
+links: {}
+notes: ''

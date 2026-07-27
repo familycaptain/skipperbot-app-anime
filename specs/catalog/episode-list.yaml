@@ -1,0 +1,18 @@
+kind: specification
+id: anime.catalog.episode-list
+title: A show's episodes, in order
+state: live
+autonomy: gated
+behavior: >
+  Choosing a show lists its episodes in numeric order, including part-episodes such as 12.5, which
+  sort between 12 and 13 rather than at the end. A show with no episodes in the chosen language
+  says so plainly instead of showing an empty grid, and the list can be reloaded on demand without
+  going back to the search.
+implements:
+- allanime.py::episodes
+- routes.py::api_episodes
+- tools.py::anime_episodes
+- ui/AnimeApp.jsx::EpisodePicker
+tests: []
+links: {}
+notes: ''

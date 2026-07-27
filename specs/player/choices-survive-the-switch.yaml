@@ -1,0 +1,15 @@
+kind: specification
+id: anime.player.choices-survive-the-switch
+title: Language and quality survive an episode change
+state: live
+autonomy: gated
+behavior: >
+  Moving to another episode keeps the language and the quality the person chose — only what they
+  actually changed changes. If the new episode does not offer that quality, the player falls back
+  to the best that episode does offer and plays, rather than refusing or silently playing nothing.
+implements:
+- ui/AnimePlayerApp.jsx::resolveSources
+- static/anime-player.html::loadSources
+tests: []
+links: {}
+notes: ''

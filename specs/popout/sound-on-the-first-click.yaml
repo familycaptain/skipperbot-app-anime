@@ -1,0 +1,16 @@
+kind: specification
+id: anime.popout.sound-on-the-first-click
+title: Sound, or a prompt explaining why not
+state: live
+autonomy: gated
+behavior: >
+  The popped-out window starts with sound when the browser allows it. When the browser refuses to
+  play audio that was not directly asked for, it plays muted and shows a prompt saying that one
+  click anywhere turns sound on — it never plays silently with no explanation, and the prompt goes
+  away on the first click or keypress.
+implements:
+- static/anime-player.html::tryAutoplay
+- static/anime-player.html::showUnmuteOverlay
+tests: []
+links: {}
+notes: ''

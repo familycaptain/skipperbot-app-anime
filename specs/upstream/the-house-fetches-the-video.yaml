@@ -1,0 +1,18 @@
+kind: specification
+id: anime.upstream.the-house-fetches-the-video
+title: The house fetches the video, not the browser
+state: live
+autonomy: gated
+behavior: >
+  The browser never talks to the video host directly: playlists and media are fetched by this
+  install and relayed to the player, including anything the playlists point at in turn. The video
+  host therefore sees one server rather than each person's browser, and learns nothing about who is
+  watching, on what, or from where. Seeking and scrubbing work through the relay as they would
+  directly.
+implements:
+- routes.py::anime_master_playlist
+- routes.py::anime_proxy_segment
+- routes.py::_rewrite_playlist
+tests: []
+links: {}
+notes: ''

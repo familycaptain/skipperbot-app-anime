@@ -1,0 +1,19 @@
+kind: specification
+id: anime.upstream.rotation-is-not-a-release
+title: Keeping up with the catalog never needs a release
+state: live
+autonomy: gated
+behavior: >
+  Whatever the catalog rotates on its own schedule is derived from the live site when it is needed,
+  and derived again when the catalog rejects a stale one, so a routine rotation costs at most one
+  retry and nobody notices. Where the catalog's location itself moves, it can be pointed elsewhere
+  by configuration. Keeping up with the catalog must never require editing and shipping the app.
+implements:
+- allanime.py::_get_crypto
+- allanime.py::get_aa_req
+- allanime.py::sources
+tests: []
+links: {}
+notes: >
+  Stated as a constraint because the constraint is the intent: before this, every upstream rotation
+  broke playback for every install until someone hand-edited a constant and redeployed.

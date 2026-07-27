@@ -1,0 +1,16 @@
+kind: specification
+id: anime.popout.popout-controls
+title: The pop-out is a whole player, not a screen
+state: live
+autonomy: gated
+behavior: >
+  The popped-out window has its own previous and next episode, sub or dub, quality and re-resolve
+  controls, behaving as they do in the app, and updates its own title and episode label when they
+  are used. Someone who pops out at the start of a series never has to come back to the app to
+  keep watching it.
+implements:
+- static/anime-player.html::loadSources
+- static/anime-player.html::refreshHeader
+tests: []
+links: {}
+notes: ''

@@ -1,0 +1,16 @@
+kind: specification
+id: anime.watchlist.remove-a-show
+title: Removing a show keeps your progress
+state: live
+autonomy: gated
+behavior: >
+  Removing a show takes it off that person's watchlist and leaves their history and position in it
+  untouched, so saving it again later shows the same progress. Removing something that was not on
+  the list says so rather than reporting a success that did nothing.
+implements:
+- data.py::remove_from_watchlist
+- routes.py::api_remove_watchlist
+- tools.py::anime_watchlist_remove
+tests: []
+links: {}
+notes: ''

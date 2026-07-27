@@ -1,0 +1,20 @@
+kind: specification
+id: anime.catalog.search-by-name
+title: Search the catalog by name
+state: live
+autonomy: gated
+behavior: >
+  Typing part of a show's name returns matching titles from the catalog with how many episodes each
+  has in the language asked for, the longest runs first and ties in alphabetical order. Shows with
+  no episodes in that language are left out entirely, so nothing offered is unplayable. An empty
+  search box searches for nothing rather than returning the whole catalog. Asked the same thing in
+  chat, Skipper answers with the same titles and counts, capped at a readable number and saying how
+  many more it did not show.
+implements:
+- allanime.py::search
+- routes.py::api_search
+- tools.py::anime_search
+- ui/AnimeApp.jsx::BrowseTab
+tests: []
+links: {}
+notes: ''

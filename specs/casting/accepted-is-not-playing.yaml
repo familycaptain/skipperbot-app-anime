@@ -1,0 +1,17 @@
+kind: specification
+id: anime.casting.accepted-is-not-playing
+title: Accepted is not the same as playing
+state: live
+autonomy: gated
+behavior: >
+  Skipper reports what the house's device controller accepted, and says plainly that acceptance is
+  not proof the episode is playing — if no picture appears, the device could not fetch the video or
+  would not play it. A refusal by the controller is reported with the device, the address sent and
+  what came back.
+implements:
+- tools.py::cast_anime_episode
+tests: []
+links: {}
+notes: >
+  The controller answers as soon as it has passed the request on, so the app cannot honestly claim
+  playback started; saying so is better than a confident false success.

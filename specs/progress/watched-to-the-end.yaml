@@ -1,0 +1,17 @@
+kind: specification
+id: anime.progress.watched-to-the-end
+title: Watching nearly to the end counts as finished
+state: live
+autonomy: gated
+behavior: >
+  An episode watched almost all the way through — past roughly the last tenth, so credits do not
+  have to be sat through — is recorded as finished without the person saying so. Being finished is
+  what makes "next episode" mean the following one rather than a replay, and what moves a show out
+  of the in-progress part of the watchlist.
+implements:
+- ui/AnimePlayerApp.jsx::AnimePlayerApp
+- static/anime-player.html
+- data.py::record_watch
+tests: []
+links: {}
+notes: ''

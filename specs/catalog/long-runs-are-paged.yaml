@@ -1,0 +1,15 @@
+kind: specification
+id: anime.catalog.long-runs-are-paged
+title: A thousand-episode show is still browsable
+state: live
+autonomy: gated
+behavior: >
+  A show with hundreds of episodes is presented in blocks of a hundred, each block labelled by its
+  real first and last episode number and selectable from a picker, with a count of how many of the
+  total are currently on screen. A show short enough to fit in one block shows no picker at all.
+  Choosing a different show starts again at the first block.
+implements:
+- ui/AnimeApp.jsx::EpisodePicker
+tests: []
+links: {}
+notes: ''

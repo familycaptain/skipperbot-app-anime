@@ -1,0 +1,14 @@
+kind: specification
+id: anime.player.browser-cannot-play-it
+title: A browser that cannot play it is told
+state: live
+autonomy: gated
+behavior: >
+  A browser with no way to play the stream format at all is told so in words, rather than being
+  left with a player that never starts and no explanation.
+implements:
+- ui/AnimePlayerApp.jsx::AnimePlayerApp
+- static/anime-player.html::attach
+tests: []
+links: {}
+notes: ''

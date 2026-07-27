@@ -1,0 +1,21 @@
+kind: specification
+id: anime.player.no-playable-source
+title: Nothing playable is said out loud
+state: live
+autonomy: gated
+behavior: >
+  When the catalog yields nothing playable for an episode, the player says so on screen, names the
+  episode and whether it was sub or dub, and suggests what to try next — the other language, a
+  different quality, another episode. It never spins indefinitely, never shows a silent black
+  frame, and never reports the episode as not existing. Asked through chat, the same failure comes
+  back as the same plain statement, including that the episode may not have been released yet or
+  that every source failed.
+implements:
+- ui/AnimePlayerApp.jsx::AnimePlayerApp
+- routes.py::api_sources
+- tools.py::anime_play
+tests: []
+links: {}
+notes: >
+  This app has twice gone dark with "no playable sources" after an upstream change, so how that
+  failure reaches the person is treated as a first-class behaviour rather than an edge case.
