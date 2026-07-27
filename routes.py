@@ -23,7 +23,10 @@ import asyncio
 import base64
 import json
 import logging
+import hashlib
+import hmac
 import re
+import secrets as _secrets_mod
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -193,6 +196,53 @@ def _b64url_decode(s: str) -> str:
     return base64.urlsafe_b64decode(s + pad).decode("utf-8")
 
 
+# ---------------------------------------------------------------------------
+# Proxy-URL signing
+# ---------------------------------------------------------------------------
+# The segment proxy fetches whatever URL it is handed, from inside the household network, and
+# streams the body back — so an unsigned `u=` parameter makes it a probe for the router, Home
+# Assistant, localhost and anything else on the LAN, usable by any signed-in account.
+#
+# Every legitimate proxy URL is minted by THIS module while rewriting a playlist, so the fix is to
+# sign them rather than to guess which hosts a stream may live on. An allowlist or an IP check
+# would have to keep up with every CDN an upstream chooses and would break playback the day it got
+# it wrong; a signature cannot, because a URL we generated always carries one.
+def _proxy_key() -> bytes:
+    """A stable key for the proxy signature, derived from the platform's master secret.
+
+    Falls back to a per-process key when the platform has no secret configured: playback keeps
+    working, and the only cost is that URLs minted before a restart stop verifying — the player
+    re-resolves sources on error. Never returns None, so signing can never be skipped.
+    """
+    global _PROXY_KEY_CACHE
+    if _PROXY_KEY_CACHE is not None:
+        return _PROXY_KEY_CACHE
+    derived = None
+    try:
+        from app_platform import secrets as _plat_secrets
+        master = _plat_secrets._key()
+        if master:
+            derived = hmac.new(master, b"anime:stream-proxy:v1", hashlib.sha256).digest()
+    except Exception:
+        derived = None
+    _PROXY_KEY_CACHE = derived or _secrets_mod.token_bytes(32)
+    return _PROXY_KEY_CACHE
+
+
+_PROXY_KEY_CACHE = None
+
+
+def _proxy_sig(u_b64: str, r_b64: str) -> str:
+    mac = hmac.new(_proxy_key(), f"{u_b64}|{r_b64}".encode(), hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(mac[:16]).decode().rstrip("=")
+
+
+def _proxy_url(abs_url: str, referer: str) -> str:
+    """The one place a proxy URL is built, so a caller can never construct a valid one."""
+    u, r = _b64url(abs_url), _b64url(referer)
+    return f"/api/apps/anime/stream/proxy?u={u}&r={r}&s={_proxy_sig(u, r)}"
+
+
 def _rewrite_playlist(playlist_text: str, base_url: str, referer: str, request: Request) -> str:
     """Replace every segment / sub-playlist URI with a proxy URL pinned to `referer`.
 
@@ -211,12 +261,11 @@ def _rewrite_playlist(playlist_text: str, base_url: str, referer: str, request: 
             def _sub_uri(m: re.Match) -> str:
                 inner = m.group(1)
                 abs_inner = inner if inner.startswith("http") else urljoin(base_url, inner)
-                proxied = f'{proxy_base}?u={_b64url(abs_inner)}&r={_b64url(referer)}'
-                return f'URI="{proxied}"'
+                return f'URI="{_proxy_url(abs_inner, referer)}"'
             out_lines.append(re.sub(r'URI="([^"]+)"', _sub_uri, line))
             continue
         abs_url = stripped if stripped.startswith("http") else urljoin(base_url, stripped)
-        out_lines.append(f"{proxy_base}?u={_b64url(abs_url)}&r={_b64url(referer)}")
+        out_lines.append(_proxy_url(abs_url, referer))
     return "\n".join(out_lines) + "\n"
 
 
@@ -277,7 +326,7 @@ async def anime_master_playlist(
 
 
 @router.get("/stream/proxy", name="anime_proxy_segment")
-async def anime_proxy_segment(u: str, request: Request, r: str = ""):
+async def anime_proxy_segment(u: str, request: Request, r: str = "", s: str = ""):
     """Stream a single segment / sub-playlist / MP4 through, with the right Referer.
 
     Critical for MP4 seeking: forwards the client's `Range` header upstream and
@@ -285,6 +334,12 @@ async def anime_proxy_segment(u: str, request: Request, r: str = ""):
     back. Without this, the browser can play sequentially but cannot scrub
     past the buffered portion.
     """
+    # Only URLs this app minted while rewriting a playlist are fetchable. Without this the
+    # endpoint fetches any URL a caller supplies and streams the body back — a read oracle for
+    # the household LAN, reachable by any signed-in account including a child's, and reachable
+    # cross-site too since the session cookie is accepted on GET.
+    if not s or not hmac.compare_digest(s, _proxy_sig(u, r)):
+        raise HTTPException(403, "Unsigned stream URL")
     try:
         upstream_url = _b64url_decode(u)
     except Exception:
@@ -334,11 +389,11 @@ async def anime_proxy_segment(u: str, request: Request, r: str = ""):
                     def _sub_uri(m: re.Match) -> str:
                         inner = m.group(1)
                         abs_inner = inner if inner.startswith("http") else urljoin(base, inner)
-                        return f'URI="/api/apps/anime/stream/proxy?u={_b64url(abs_inner)}&r={_b64url(referer)}"'
+                        return f'URI="{_proxy_url(abs_inner, referer)}"'
                     lines.append(re.sub(r'URI="([^"]+)"', _sub_uri, line))
                     continue
                 abs_url = stripped if stripped.startswith("http") else urljoin(base, stripped)
-                lines.append(f"/api/apps/anime/stream/proxy?u={_b64url(abs_url)}&r={_b64url(referer)}")
+                lines.append(_proxy_url(abs_url, referer))
             return Response("\n".join(lines) + "\n", media_type=media_type)
 
     # Binary stream (mp4 / ts / vtt / unknown). Open the upstream connection,
